@@ -1,0 +1,32 @@
+{
+  "traders": [
+    {
+      "id": 1,
+      "name": "Sunny International",
+      "totalAmount": 20000,
+      "paidAmount": 5000
+    },
+    {
+      "id": 2,
+      "name": "ABC Traders",
+      "totalAmount": 15000,
+      "paidAmount": 3000
+    }
+  ],
+  "consignees": [
+    {
+      "id": 1,
+      "name": "Fru Mix Veg",
+      "totalAmount": 25000,
+      "paidAmount": 10000
+    }
+  ],
+  "packers": [
+    {
+      "id": 1,
+      "name": "XYZ Packers",
+      "totalAmount": 12000,
+      "paidAmount": 4000
+    }
+  ]
+}

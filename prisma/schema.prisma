@@ -1,0 +1,263 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  password     String
+  name         String?
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  createdById  Int?
+  createdBy    User?    @relation("CreatedUsers", fields: [createdById], references: [id])
+  createdUsers User[]   @relation("CreatedUsers")
+}
+
+model Trader {
+  id       Int     @id @default(autoincrement())
+  name     String
+  ntn      String
+  address  String
+  country  String
+createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  financialInstruments FinancialInstrument[]
+  consignments Consignment[]
+}
+model Commodity {
+  id        Int      @id @default(autoincrement())
+  name      String
+  number    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  consignmentItems ConsignmentItem[]
+}
+
+model Vendor {
+  id        Int      @id @default(autoincrement())
+  name      String
+  ntn       String
+  address   String
+  country   String
+  station   String
+  balance   Float
+  currency  String
+  createdAt DateTime @default(now())
+
+  packer      Packer[]
+  consignee   Consignee[]
+  iataAgent   IATAAgent[]
+  customAgent CustomAgent[]
+}
+
+model Packer {
+  id        Int       @id @default(autoincrement())
+  vendorId  Int
+  vendor    Vendor    @relation(fields: [vendorId], references: [id])
+  createdAt DateTime  @default(now())
+  packing   Packing[]
+
+}
+
+model Consignee {
+  id        Int      @id @default(autoincrement())
+  vendorId  Int
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  createdAt DateTime @default(now())
+
+  consignments        Consignment[]
+  FinancialInstrument FinancialInstrument[]
+}
+
+model IATAAgent {
+  id          Int          @id @default(autoincrement())
+  vendorId    Int
+  vendor      Vendor       @relation(fields: [vendorId], references: [id])
+  createdAt   DateTime     @default(now())
+  airwayBills AirwayBill[]
+}
+
+model CustomAgent {
+  id        Int      @id @default(autoincrement())
+  vendorId  Int
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  createdAt DateTime @default(now())
+
+  clearances CustomClearance[]
+}
+
+model Packaging {
+  id                     Int      @id @default(autoincrement())
+  name                   String
+  packagingWeightPerUnit String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  consignmentItems ConsignmentItem[]
+}
+
+model GoodsDeclaration {
+  id                      Int      @id @default(autoincrement())
+  number                  String
+  date                    DateTime
+  exchangeRate            Float
+  commercialInvoiceNumber String
+  fob                     Float
+  gdFreight               Float
+  r1                      Float
+  dateR1                  DateTime
+  r2                      Float
+  dateR2                  DateTime
+  r3                      Float
+  dateR3                  DateTime
+  r4                      Float
+  dateR4                  DateTime
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  consignments Consignment[]
+  Utilization  FinancialInstrumentUtilization[]
+}
+
+model Packing {
+  id        Int      @id @default(autoincrement())
+  packerId  Int
+  ratePerKg Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  packer       Packer        @relation(fields: [packerId], references: [id])
+  consignments Consignment[]
+}
+
+model RecoveryDone {
+  id           Int           @id @default(autoincrement())
+  amount       Float
+  currency     String
+  exchangeRate Float
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  consignments Consignment[]
+}
+
+model AirwayBill {
+  id               Int      @id @default(autoincrement())
+  number           String
+  iataAgentId      Int
+  dateTime         DateTime
+  rate             Float
+  airwayBillWeight Float
+  fee              Float
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  iataAgent IATAAgent @relation(fields: [iataAgentId], references: [id])
+
+  consignments Consignment[]
+}
+
+
+model CustomClearance {
+  id            Int      @id @default(autoincrement())
+  customAgentId Int
+  fee           Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customAgent  CustomAgent   @relation(fields: [customAgentId], references: [id])
+  consignments Consignment[]
+}
+
+model FinancialInstrument {
+  id           Int       @id @default(autoincrement())
+  number       String
+  traderId     Int?
+  bankName     String?
+  mode         String?
+  consigneeId  Int?
+  deliveryTerm String?
+  currency     String?
+  localDate    DateTime?
+  expiryDate   DateTime?
+  status       String?
+  amount       Float     @default(0)
+  balance      Float     @default(0)
+  iban         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  trader    Trader?    @relation(fields: [traderId], references: [id])
+  consignee Consignee? @relation(fields: [consigneeId], references: [id])
+  utilizations FinancialInstrumentUtilization[]
+}
+
+model FinancialInstrumentUtilization {
+  id                    Int      @id @default(autoincrement())
+  financialInstrumentId Int
+  goodsDeclarationId    Int
+  utilized              Float
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  financialInstrument FinancialInstrument @relation(fields: [financialInstrumentId], references: [id])
+  goodsDeclaration    GoodsDeclaration    @relation(fields: [goodsDeclarationId], references: [id])
+}
+
+model ConsignmentItem {
+  id              Int             @id @default(autoincrement())
+  consignmentId   Int
+  commodityItemId Int
+  packagingId     Int
+  weightPerUnit   Float
+  commodityPerUnitCost Float
+  packagingPerUnitCost Float
+  quantity        Int
+  damage          Int
+
+  consignment     Consignment    @relation(fields: [consignmentId], references: [id])
+  commodityItem   Commodity  @relation(fields: [commodityItemId], references: [id])
+  packaging       Packaging      @relation(fields: [packagingId], references: [id])
+}
+
+
+
+model Consignment {
+  id                 Int                  @id @default(autoincrement())
+  traderId           Int?
+  consigneeId        Int?
+  airwayBillId       Int?
+  goodsDeclarationId Int?
+  customClearanceId  Int?
+  packingId          Int?
+  recoveryDoneId     Int?
+
+  date               DateTime
+  localInvoiceWeight Float?
+  dailyExpenses      Float?
+  status             String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  trader           Trader?           @relation(fields: [traderId], references: [id])
+  consignee        Consignee?        @relation(fields: [consigneeId], references: [id])
+  airwayBill       AirwayBill?       @relation(fields: [airwayBillId], references: [id])
+  goodsDeclaration GoodsDeclaration? @relation(fields: [goodsDeclarationId], references: [id])
+  customClearance  CustomClearance?  @relation(fields: [customClearanceId], references: [id])
+  packing          Packing?          @relation(fields: [packingId], references: [id])
+  recoveryDone     RecoveryDone?     @relation(fields: [recoveryDoneId], references: [id])
+
+  goods ConsignmentItem[]
+}

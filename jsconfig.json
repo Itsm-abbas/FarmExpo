@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@components/*": ["app/components/*"], // Alias for components
+      "@forms/*": ["app/components/Forms/*"], // Alias for forms
+      "@utils/*": ["utils/*"], // Alias for utilities
+      "@constants/*": ["constants/*"], // Alias for constants
+      "@context/*": ["context/*"], // Alias for context
+      "@lib/*": ["lib/*"], // Alias for lib
+
+    }
+  }
+}
