@@ -242,37 +242,35 @@ export default function Home() {
           {isLoading && <DataLoader />}
 
           {!isLoading && (
-            <motion.table
-              className="w-full mb-4 min-w-max text-xs sm:text-sm 2xl:text-lg border-collapse border border-LightBorder dark:border-DarkBorder capitalize rounded-lg overflow-hidden shadow-md dark:shadow-xl "
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <thead>
-                <tr className="bg-PrimaryButton text-white">
-                  {[
-                    "No",
-                    "Date",
-                    "Consignee",
-                    "Destination",
-                    "Status",
-                    "Actions",
-                  ].map((item, index) => (
-                    <th
-                      key={index}
-                      className="px-3 2xl:px-5 sm:px-6 md:px-4 py-2 border border-LightBorder dark:border-DarkBorder text-center"
-                    >
-                      {item}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {consignments?.length > 0 ? (
-                  [...consignments]
-                    .reverse()
-                    // .filter((item) => item.status !== "Fulfilled") // Filter out "Fullfilled" consignments
-                    .map((item, index) => (
+            <div className="w-full overflow-x-auto">
+              <motion.table
+                className="w-full min-w-[600px] text-xs sm:text-sm 2xl:text-lg border-collapse border border-LightBorder dark:border-DarkBorder capitalize rounded-lg shadow-md dark:shadow-xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <thead>
+                  <tr className="bg-PrimaryButton text-white">
+                    {[
+                      "No",
+                      "Date",
+                      "Consignee",
+                      "Destination",
+                      "Status",
+                      "Actions",
+                    ].map((item, index) => (
+                      <th
+                        key={index}
+                        className="px-3 2xl:px-5 sm:px-6 md:px-4 py-2 border border-LightBorder dark:border-DarkBorder text-center"
+                      >
+                        {item}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {consignments?.length > 0 ? (
+                    [...consignments].reverse().map((item, index) => (
                       <motion.tr
                         key={index}
                         initial={{ opacity: 0, y: 10 }}
@@ -280,19 +278,19 @@ export default function Home() {
                         transition={{ duration: 0.6, delay: index * 0.3 }}
                         className="hover:bg-gray-100 dark:hover:bg-gray-800 transition"
                       >
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-center">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           {index + 1}
                         </td>
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-center">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           {item?.date.slice(0, 10)}
                         </td>
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-center">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           {item?.consignee?.vendor?.name || "N/A"}
                         </td>
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-center">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           {item?.consignee?.vendor.address}
                         </td>
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-center">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-semibold ${
                               item?.status === "Pending"
@@ -305,7 +303,7 @@ export default function Home() {
                             {item?.status || "N/A"}
                           </span>
                         </td>
-                        <td className="border border-LightBorder dark:border-DarkBorder  sm:px-4 py-2 text-cente">
+                        <td className="border border-LightBorder dark:border-DarkBorder sm:px-4 py-2 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => router.push(`/invoice/${item.id}`)}
@@ -329,15 +327,16 @@ export default function Home() {
                         </td>
                       </motion.tr>
                     ))
-                ) : (
-                  <tr className="text-center">
-                    <td colSpan="4" className="py-4 text-gray-500">
-                      No consignments found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </motion.table>
+                  ) : (
+                    <tr className="text-center">
+                      <td colSpan="6" className="py-4 text-gray-500">
+                        No consignments found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </motion.table>
+            </div>
           )}
           <LinkButton
             title={"Show All"}

@@ -61,7 +61,7 @@ export default function AllConsignments() {
             .includes(searchTerm);
           break;
         default: // consignee
-          matchesSearch = item.consignee?.name
+          matchesSearch = item.consignee?.vendor.name
             ?.toLowerCase()
             .includes(searchTerm);
       }
@@ -82,7 +82,9 @@ export default function AllConsignments() {
         Date: item?.goodsDeclaration?.date,
         "Invoice No": item?.goodsDeclaration?.commercialInvoiceNumber,
         Commodity:
-          item?.goods.length > 1 ? "Mix Veg" : item?.goods[0]?.item.name,
+          item?.goods.length > 1
+            ? "Mix Veg"
+            : item?.goods[0]?.commodityItem.name,
         "AWB/BL NO": item?.airwayBill?.number,
         "Container NO": "",
         "Local Invoice PKR": "",
