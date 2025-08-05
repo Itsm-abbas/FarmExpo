@@ -42,10 +42,6 @@ export default function Login() {
 
       const result = await response.json();
 
-      setCookie("token", result.token, {
-        secure: window.location.protocol === "https:",
-      });
-
       // Automatically redirect to the home page
       router.push("/");
     } catch (error) {

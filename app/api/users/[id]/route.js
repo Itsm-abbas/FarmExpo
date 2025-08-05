@@ -38,12 +38,14 @@ export async function DELETE(_, { params }) {
 }
 
 export async function PUT(req, { params }) {
-  const admin = getAdmin();
-  const userId = parseInt(params.id);
+  const token = cookies().get("token")?.value;
+  const admin = verifyToken(token);
 
-  if (!admin) {
+  if (!admin || admin.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const userId = parseInt(params.id);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -51,10 +53,23 @@ export async function PUT(req, { params }) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
+  // Prevent self-demotion
+  if (userId === admin.id) {
+    return NextResponse.json(
+      { error: "You cannot change your own role." },
+      { status: 400 }
+    );
+  }
+
+  const newRole = user.role === "admin" ? "user" : "admin";
+
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { role: "admin" },
+    data: { role: newRole },
   });
 
-  return NextResponse.json({ message: "Promoted to admin", user: updated });
+  return NextResponse.json({
+    message: newRole === "admin" ? "Promoted to admin" : "Demoted to user",
+    user: updated,
+  });
 }

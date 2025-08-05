@@ -20,12 +20,9 @@ import { LoaderIcon } from "react-hot-toast";
 export default function ItemSelectionPage() {
   const router = useRouter();
   const token = getCookie("token");
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   const { id } = useParams();
-  const [items, setItems] = useState([]);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
   const [showDetailInput, setShowDetailInput] = useState(false);
   const [showDetailsView, setShowDetailsView] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -37,112 +34,88 @@ export default function ItemSelectionPage() {
     packagingPerUnitCost: "",
     packaging: null,
   });
-  const [packagingOptions, setPackagingOptions] = useState([]);
 
   const {
-    isLoadingGoods,
+    data: items = [],
+    isLoading: isLoadingCommodities,
+    error: commoditiesError,
+  } = useQuery({
+    queryKey: ["commodities"],
+    queryFn: async () => {
+      const res = await fetch(`/api/commodity`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch commodities");
+      return res.json();
+    },
+  });
+
+  const {
+    data: packagingOptions = [],
+    isLoading: isLoadingPackaging,
+    error: packagingError,
+  } = useQuery({
+    queryKey: ["packaging"],
+    queryFn: async () => {
+      const res = await fetch(`/api/packaging`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch packaging");
+      return res.json();
+    },
+  });
+
+  const {
+    isLoading: isLoadingGoods,
     data: goods,
     refetch,
+    error: consignmentError,
   } = useQuery({
     queryKey: ["consignments", id],
     queryFn: () => fetchConsignmentById(id),
     select: (data) => data?.goods || [],
   });
 
-  // Fetch packaging data
   useEffect(() => {
-    const fetchPackaging = async () => {
-      try {
-        const response = await fetch(`/api/packaging`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+    if (!goods) return;
+    const existingItems = goods.reduce((acc, good) => {
+      if (!acc[good.commodityItem.id]) acc[good.commodityItem.id] = [];
+      acc[good.commodityItem.id].push({
+        id: good.id,
+        quantity: good.quantity,
+        weightPerUnit: good.weightPerUnit,
+        commodityPerUnitCost: good.commodityPerUnitCost,
+        packagingPerUnitCost: good.packagingPerUnitCost,
+        packaging: good.packaging,
+        damage: good.damage,
+      });
+      return acc;
+    }, {});
+    setSelectedItems(existingItems);
+  }, [goods]);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch packaging data.");
-        }
-
-        const data = await response.json();
-        setPackagingOptions(data);
-      } catch (error) {
-        console.error("Error fetching packaging data:", error);
-      }
-    };
-
-    fetchPackaging();
-  }, [token, apiUrl]);
-
-  // Fetch commodities and consignment data
   useEffect(() => {
-    const fetchCommodities = async () => {
-      const response = await fetch(`/api/commodity`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+    if (commoditiesError || packagingError || consignmentError) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text:
+          commoditiesError?.message ||
+          packagingError?.message ||
+          consignmentError?.message ||
+          "Something went wrong",
       });
+    }
+  }, [commoditiesError, packagingError, consignmentError]);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch commodities.");
-      }
-
-      return await response.json();
-    };
-
-    const fetchConsignment = async () => {
-      const response = await fetch(`/api/consignment/${id}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch consignment data.");
-      }
-
-      return await response.json();
-    };
-
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [commodityData, consignmentData] = await Promise.all([
-          fetchCommodities(),
-          fetchConsignment(),
-        ]);
-
-        // Map existing items with all details
-        const existingItems = consignmentData.goods?.reduce((acc, good) => {
-          if (!acc[good.commodityItem.id]) {
-            acc[good.commodityItem.id] = [];
-          }
-          acc[good.commodityItem.id].push({
-            id: good.id,
-            quantity: good.quantity,
-            weightPerUnit: good.weightPerUnit,
-            commodityPerUnitCost: good.commodityPerUnitCost,
-            packagingPerUnitCost: good.packagingPerUnitCost,
-            packaging: good.packaging,
-            damage: good.damage,
-          });
-          return acc;
-        }, {});
-
-        setItems(commodityData);
-        setSelectedItems(existingItems || {});
-      } catch (error) {
-        Swal.fire({ icon: "error", title: "Error", text: error.message });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [id, token, apiUrl]);
-
+  const isLoading =
+    isLoadingCommodities || isLoadingPackaging || isLoadingGoods;
   const handleItemSelect = (item) => {
     setCurrentItem(item);
     if (selectedItems[item.id]?.length > 0) {
@@ -353,7 +326,6 @@ export default function ItemSelectionPage() {
           return await response.json();
         };
         const fetchData = async () => {
-          setIsLoading(true);
           try {
             const [consignmentData] = await Promise.all([fetchConsignment()]);
 
@@ -378,7 +350,6 @@ export default function ItemSelectionPage() {
           } catch (error) {
             Swal.fire({ icon: "error", title: "Error", text: error.message });
           } finally {
-            setIsLoading(false);
           }
         };
 

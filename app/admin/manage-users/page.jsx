@@ -7,50 +7,35 @@ import SaveButton from "@components/Button/SaveButton";
 import { getCookie } from "cookies-next";
 import useAuth from "../../../hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
 export default function ManageUsersPage() {
   const { user, loading } = useAuth();
-  console.log(user);
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const token = getCookie("token");
+
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) {
-      router.replace("/"); // Redirect non-admins
+      router.replace("/");
     }
   }, [user, loading]);
-  const [users, setUsers] = useState([]);
-  const [formData, setFormData] = useState({
-    email: "",
-    name: "",
-    password: "",
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => {
+      if (!token || !user || user.role != "admin") return [];
+      const res = await fetch("/api/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.json();
+    },
+    enabled: !!user && user.role === "admin",
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const token = getCookie("token");
-  const fetchUsers = async () => {
-    if (!loading && (user || user.role == "admin")) {
-      try {
-        const res = await fetch("/api/users", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setUsers(data);
-      } catch (err) {
-        Swal.fire("Error", "Failed to fetch users", "error");
-      }
-    }
-  };
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-  const handleCreateUser = async () => {
-    const { email, name, password } = formData;
-
-    if (!email || !password) {
-      Swal.fire("Error", "Email and Password are required", "error");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
+  const createUserMutation = useMutation({
+    mutationFn: async (formData) => {
       const res = await fetch("/api/users/create", {
         method: "POST",
         headers: {
@@ -59,49 +44,97 @@ export default function ManageUsersPage() {
         },
         body: JSON.stringify(formData),
       });
-
       if (!res.ok) {
-        const errorMessage = await res.json(); // Get detailed error
-        throw new Error(errorMessage.error);
+        const errorData = await res.json();
+        throw new Error(errorData.error);
       }
-
-      await fetchUsers();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["users"]);
       setFormData({ email: "", name: "", password: "" });
-      Swal.fire("Success", "User created", "success");
-    } catch (err) {
-      console.error("Error creating user:", err);
-      Swal.fire("Error", "Failed to create user", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      Swal.fire({
+        icon: "success",
+        title: "User created",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "Failed to create user",
+      });
+    },
+  });
 
-  const handleDelete = async (id) => {
-    const confirm = await Swal.fire({
-      title: "Are you sure?",
-      text: "User will be deleted permanently.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete it!",
-    });
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id) => {
+      await fetch(`/api/users/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["users"]);
+      Swal.fire({
+        icon: "success",
+        title: "User deleted",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    },
+    onError: () => {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to delete user",
+      });
+    },
+  });
 
-    if (confirm.isConfirmed) {
-      try {
-        await fetch(`/api/users/${id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
+  const [actionLoading, setActionLoading] = useState({});
+
+  const promoteOrUnpromoteUser = async (id, toRole) => {
+    setActionLoading((prev) => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`/api/users/${id}?role=${toRole}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Swal.fire({
+          icon: "success",
+          title: `User ${toRole === "admin" ? "promoted" : "unpromoted"}`,
+          timer: 1500,
+          showConfirmButton: false,
         });
-        await fetchUsers();
-        Swal.fire("Deleted!", "User has been deleted.", "success");
-      } catch {
-        Swal.fire("Error", "Failed to delete user", "error");
+        queryClient.invalidateQueries(["users"]);
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: data.error || "Action failed",
+        });
       }
+    } catch {
+      Swal.fire("Error", "Something went wrong", "error");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [id]: false }));
     }
   };
+
+  const [formData, setFormData] = useState({
+    email: "",
+    name: "",
+    password: "",
+  });
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">Admin: Manage Users</h2>
+      <h2 className="text-2xl font-bold mb-6">Add User</h2>
 
       <div className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-8 space-y-4 w-full max-w-md">
         <Input
@@ -131,63 +164,80 @@ export default function ManageUsersPage() {
           placeholder="Enter password"
         />
         <SaveButton
-          handleSubmit={handleCreateUser}
-          isLoading={isLoading}
+          handleSubmit={() => createUserMutation.mutate(formData)}
+          isLoading={createUserMutation.isLoading}
           existingData={false}
         />
       </div>
 
       <div className="space-y-4">
         <h3 className="text-lg font-semibold mb-2">Users List</h3>
-        {users?.map((user) => (
-          <div
-            key={user.id}
-            className="flex items-center justify-between border p-3 rounded-md"
-          >
-            <div>
-              <p className="font-semibold">{user.email}</p>
-              <p className="text-sm">{user.name || "No Name"}</p>
-              <p className="text-xs italic">{user.role}</p>
-            </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          {users?.map((user) => (
+            <div
+              key={user.id}
+              className="flex items-center justify-between border p-4 rounded-md shadow bg-white dark:bg-gray-700 hover:shadow-md transition-all"
+            >
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-gray-100">
+                  {user.email}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {user.name || "No Name"}
+                </p>
+                <p className="text-xs italic text-gray-500 dark:text-gray-400">
+                  {user.role}
+                </p>
+              </div>
 
-            <div className="flex gap-2">
-              {user.role !== "admin" && (
+              <div className="flex gap-2">
+                {user.role !== "admin" ? (
+                  <button
+                    className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition"
+                    onClick={() => promoteOrUnpromoteUser(user.id, "admin")}
+                    disabled={actionLoading[user.id]}
+                  >
+                    {actionLoading[user.id] ? "Loading..." : "Promote"}
+                  </button>
+                ) : (
+                  <button
+                    className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 transition"
+                    onClick={() => promoteOrUnpromoteUser(user.id, "user")}
+                    disabled={actionLoading[user.id]}
+                  >
+                    {actionLoading[user.id] ? "Loading..." : "Unpromote"}
+                  </button>
+                )}
+
                 <button
-                  className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
                   onClick={async () => {
-                    try {
-                      const res = await fetch(`/api/users/${user.id}`, {
-                        method: "PUT",
-                      });
-                      const data = await res.json();
-                      if (res.ok) {
-                        Swal.fire("Success", "Promoted to admin", "success");
-                        await fetchUsers();
-                      } else {
-                        Swal.fire(
-                          "Error",
-                          data.error || "Failed to promote",
-                          "error"
-                        );
-                      }
-                    } catch {
-                      Swal.fire("Error", "Something went wrong", "error");
+                    const result = await Swal.fire({
+                      title: "Are you sure?",
+                      text: "This action cannot be undone.",
+                      icon: "warning",
+                      showCancelButton: true,
+                      confirmButtonColor: "#d33",
+                      cancelButtonColor: "#3085d6",
+                      confirmButtonText: "Yes, delete it!",
+                    });
+
+                    if (result.isConfirmed) {
+                      deleteUserMutation.mutate(user.id);
                     }
                   }}
+                  className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition"
+                  disabled={
+                    deleteUserMutation.isLoading && actionLoading[user.id]
+                  }
                 >
-                  Promote
+                  {deleteUserMutation.isLoading && actionLoading[user.id]
+                    ? "Deleting..."
+                    : "Delete"}
                 </button>
-              )}
-
-              <button
-                onClick={() => handleDelete(user.id)}
-                className="bg-red-500 text-white px-2 py-1 rounded text-sm hover:bg-red-600"
-              >
-                Delete
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

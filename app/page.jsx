@@ -10,8 +10,8 @@ import fonts from "@utils/fonts";
 import { MdDelete, MdEdit, MdVisibility } from "react-icons/md";
 import { AnimatePresence, motion } from "framer-motion";
 import LinkButton from "@components/Button/LinkButton";
-// import { fetchConsignments } from "@constants/consignmentAPI";
 import axiosInstance from "@utils/axiosConfig";
+import { fetchConsignments } from "@constants/consignmentAPI";
 
 export default function Home() {
   // const userData = getUserDataFromToken();
@@ -20,8 +20,17 @@ export default function Home() {
   const [greeting, setGreeting] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false); // State to control modal visibility
   const [selectedDate, setSelectedDate] = useState(""); // State to store the selected date
-  const [data, setData] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    data: consignments,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["consignments"],
+    queryFn: fetchConsignments,
+    staleTime: 1000 * 60 * 5, // cache is considered fresh for 5 minutes
+    cacheTime: 1000 * 60 * 10, // data remains in cache for 10 minutes
+  });
 
   // Mutation for starting a new consignment
   const startConsignmentMutation = useMutation({
@@ -46,7 +55,7 @@ export default function Home() {
       await axiosInstance.delete(`/consignment/${id}`);
     },
     onSuccess: () => {
-      fetchConsignments();
+      queryClient.invalidateQueries(["consignments"]); // Refresh the list
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -121,23 +130,6 @@ export default function Home() {
     setGreeting(getGreeting());
   }, []);
 
-  // Fetch consignments
-  const fetchConsignments = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axiosInstance.get("/consignment");
-      setData(response.data); // Update the data state
-    } catch (error) {
-      console.error("Failed to fetch consignments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch consignments on component mount
-  useEffect(() => {
-    fetchConsignments();
-  }, []);
   return (
     <motion.div
       className="py-24 "
@@ -276,8 +268,8 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {data?.length > 0 ? (
-                  [...data]
+                {consignments?.length > 0 ? (
+                  [...consignments]
                     .reverse()
                     // .filter((item) => item.status !== "Fulfilled") // Filter out "Fullfilled" consignments
                     .map((item, index) => (

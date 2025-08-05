@@ -23,7 +23,7 @@ export async function POST(req) {
   const token = generateToken(user);
 
   const res = NextResponse.json({ token });
-  res.cookies.set("token", token, { httpOnly: true, path: "/" });
+  res.cookies.set("token", token, { httpOnly: false, path: "/" });
 
   return res;
 }
