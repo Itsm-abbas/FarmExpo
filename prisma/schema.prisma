@@ -36,6 +36,7 @@ createdAt DateTime @default(now())
   financialInstruments FinancialInstrument[]
   consignments Consignment[]
 }
+
 model Commodity {
   id        Int      @id @default(autoincrement())
   name      String

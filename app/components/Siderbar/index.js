@@ -84,7 +84,7 @@ export default function Sidebar({ isSidebarOpen, onClose }) {
             <div key={index} className="flex flex-col">
               <button
                 onClick={() => toggleDropdown(index)}
-                className="flex items-center justify-between p-2 sm:p-3 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 rounded-lg text-sm sm:text-base transition-colors duration-200"
+                className="flex items-center justify-between p-2 sm:p-3 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 rounded-lg text-base sm:text-lg transition-colors duration-200"
               >
                 <span>{category.name}</span>
                 <motion.div
