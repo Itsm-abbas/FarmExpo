@@ -1,6 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.number-font {
+  font-family: 'Roboto Mono', 'Consolas', 'Menlo', monospace;
+  letter-spacing: 0.02em;
+}
 
 .input {
   background: none;
@@ -83,10 +89,12 @@
   table {
     page-break-inside: avoid;
   }
+
   tr {
     page-break-inside: avoid;
     page-break-after: auto;
   }
+
   thead {
     display: table-header-group;
   }

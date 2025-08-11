@@ -12,7 +12,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body
-        className={`${font.raleway.className} bg-LightPBg dark:bg-DarkPBg text-LightPText dark:text-DarkPText`}
+        className={`${font.roboto.className} bg-LightPBg dark:bg-DarkPBg text-LightPText dark:text-DarkPText`}
       >
         <ThemeProvider>
           <Providers>{children}</Providers>

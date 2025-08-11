@@ -193,7 +193,9 @@ export default function Home() {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <h1 className="text-3xl sm:text-3xl md:text-5xl font-bold gap-2 flex flex-wrap">
+          <h1
+            className={`${fonts.montserrat.className} text-3xl sm:text-3xl md:text-5xl  gap-2 flex flex-wrap`}
+          >
             <motion.span>{greeting}!</motion.span>
             <motion.span
               initial={{ scale: 0.8 }}
@@ -220,14 +222,14 @@ export default function Home() {
             {!startConsignmentMutation.isPending && <FaArrowRight />}
           </motion.button>
           <motion.button
-            onClick={() => router.push("/selectLedger")}
+            onClick={() => router.push("/vendors/transactions")}
             className={`${fonts.poppins.className} cursor-pointer text-sm sm:text-base flex gap-2 items-center px-3 sm:px-5 py-2 bg-SecondaryButton hover:bg-SecondaryButtonHover text-white rounded-lg transition`}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             disabled={startConsignmentMutation.isPending}
           >
             View Ledger
-            <FaEye />- Coming soon...
+            <FaEye />
           </motion.button>
         </motion.div>
 

@@ -62,6 +62,20 @@ model Vendor {
   consignee   Consignee[]
   iataAgent   IATAAgent[]
   customAgent CustomAgent[]
+  transactions Transaction[]
+}
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId  Int
+  type      String   // "credit" or "debit"
+  amount    Float
+  note      String?
+  createdBy Int?     // user who created this
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
 }
 
 model Packer {
