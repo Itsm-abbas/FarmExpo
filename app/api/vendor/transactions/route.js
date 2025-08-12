@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export async function POST(req) {
   const { vendorId, type, amount, note } = await req.json();
   const parsedAmount = parseFloat(amount);
-
+  // type validation
   const transaction = await prisma.transaction.create({
     data: { vendorId, type, amount: parsedAmount, note },
   });
