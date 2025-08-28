@@ -26,15 +26,15 @@ model User {
 }
 
 model Trader {
-  id       Int     @id @default(autoincrement())
-  name     String
-  ntn      String
-  address  String
-  country  String
-createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   Int                   @id @default(autoincrement())
+  name                 String
+  ntn                  String
+  address              String
+  country              String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   financialInstruments FinancialInstrument[]
-  consignments Consignment[]
+  consignments         Consignment[]
 }
 
 model Commodity {
@@ -58,22 +58,25 @@ model Vendor {
   currency  String
   createdAt DateTime @default(now())
 
-  packer      Packer[]
-  consignee   Consignee[]
-  iataAgent   IATAAgent[]
-  customAgent CustomAgent[]
+  packer       Packer[]
+  consignee    Consignee[]
+  iataAgent    IATAAgent[]
+  customAgent  CustomAgent[]
   transactions Transaction[]
 }
 
 model Transaction {
-  id        Int      @id @default(autoincrement())
-  vendor    Vendor   @relation(fields: [vendorId], references: [id])
-  vendorId  Int
-  type      String   // "credit" or "debit"
-  amount    Float
-  note      String?
-  createdBy Int?     // user who created this
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId      Int
+  voucherId     String
+  transactionId String
+  type          String // "credit" or "debit"
+  amount        Float
+  details       String?
+  createdBy     Int? // user who created this
+  balanceAfter  Float // vendor balance immediately after this txn
+  createdAt     DateTime @default(now())
 
   @@index([vendorId])
 }
@@ -84,7 +87,6 @@ model Packer {
   vendor    Vendor    @relation(fields: [vendorId], references: [id])
   createdAt DateTime  @default(now())
   packing   Packing[]
-
 }
 
 model Consignee {
@@ -184,7 +186,6 @@ model AirwayBill {
   consignments Consignment[]
 }
 
-
 model CustomClearance {
   id            Int      @id @default(autoincrement())
   customAgentId Int
@@ -214,8 +215,8 @@ model FinancialInstrument {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  trader    Trader?    @relation(fields: [traderId], references: [id])
-  consignee Consignee? @relation(fields: [consigneeId], references: [id])
+  trader       Trader?                          @relation(fields: [traderId], references: [id])
+  consignee    Consignee?                       @relation(fields: [consigneeId], references: [id])
   utilizations FinancialInstrumentUtilization[]
 }
 
@@ -232,25 +233,23 @@ model FinancialInstrumentUtilization {
 }
 
 model ConsignmentItem {
-  id              Int             @id @default(autoincrement())
-  consignmentId   Int
-  commodityItemId Int
-  packagingId     Int
-  weightPerUnit   Float
+  id                   Int   @id @default(autoincrement())
+  consignmentId        Int
+  commodityItemId      Int
+  packagingId          Int
+  weightPerUnit        Float
   commodityPerUnitCost Float
   packagingPerUnitCost Float
-  quantity        Int
-  damage          Int
+  quantity             Int
+  damage               Int
 
-  consignment     Consignment    @relation(fields: [consignmentId], references: [id])
-  commodityItem   Commodity  @relation(fields: [commodityItemId], references: [id])
-  packaging       Packaging      @relation(fields: [packagingId], references: [id])
+  consignment   Consignment @relation(fields: [consignmentId], references: [id])
+  commodityItem Commodity   @relation(fields: [commodityItemId], references: [id])
+  packaging     Packaging   @relation(fields: [packagingId], references: [id])
 }
 
-
-
 model Consignment {
-  id                 Int                  @id @default(autoincrement())
+  id                 Int  @id @default(autoincrement())
   traderId           Int?
   consigneeId        Int?
   airwayBillId       Int?
@@ -263,8 +262,8 @@ model Consignment {
   localInvoiceWeight Float?
   dailyExpenses      Float?
   status             String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   trader           Trader?           @relation(fields: [traderId], references: [id])
   consignee        Consignee?        @relation(fields: [consigneeId], references: [id])

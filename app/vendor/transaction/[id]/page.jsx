@@ -2,61 +2,106 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Swal from "sweetalert2"; // <-- Install: npm install sweetalert2
+import Swal from "sweetalert2";
 import fonts from "@utils/fonts";
-import Loading from "app/loading";
+import { AnimatePresence, motion } from "framer-motion";
 
 export default function VendorTransactionPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
 
+  // ✅ Fetch vendor + transactions (with balanceAfter from DB)
   const { data, isLoading } = useQuery({
     queryKey: ["vendorTransactions", id],
     queryFn: async () => {
       const res = await fetch(`/api/vendor/transactions/${id}`);
+      if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
   });
 
-  const [form, setForm] = useState({ type: "credit", amount: "", note: "" });
+  // --- Form States ---
+  const [form, setForm] = useState({
+    type: "credit",
+    transactionId: "",
+    amount: "",
+    details: "",
+    voucherId: "",
+  });
   const [editForm, setEditForm] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
 
+  // --- Mutations ---
   const addMutation = useMutation({
     mutationFn: async (payload) => {
-      await fetch("/api/vendor/transactions", {
+      const res = await fetch("/api/vendor/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error("Failed to add transaction");
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["vendorTransactions", id]);
       Swal.fire({
         icon: "success",
         title: "Transaction Added",
-        text: "Your transaction has been successfully added.",
         timer: 2000,
         showConfirmButton: false,
       });
-      setForm({ type: "credit", amount: "", note: "" });
+      setForm({
+        type: "credit",
+        transactionId: "",
+        amount: "",
+        details: "",
+        voucherId: "",
+      });
     },
-    onError: () => {
+    onError: () =>
       Swal.fire({
         icon: "error",
         title: "Error",
         text: "Something went wrong while adding the transaction.",
+      }),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await fetch("/api/vendor/transactions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok)
+        throw new Error("Only the most recent transaction can be updated");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["vendorTransactions", id]);
+      setShowEdit(false);
+      setEditForm(null);
+      Swal.fire({
+        icon: "success",
+        title: "Transaction Updated",
+        timer: 1500,
+        showConfirmButton: false,
       });
     },
+    onError: (error) =>
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message,
+      }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (tid) => {
-      await fetch("/api/vendor/transactions", {
+      const res = await fetch("/api/vendor/transactions", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: tid }),
       });
+      if (!res.ok) throw new Error("Failed to delete transaction");
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["vendorTransactions", id]);
@@ -67,7 +112,38 @@ export default function VendorTransactionPage() {
         showConfirmButton: false,
       });
     },
+    onError: () =>
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Only the latest transaction can be deleted.",
+      }),
   });
+
+  // --- Handlers ---
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.amount || !form.details || !form.transactionId) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Missing Fields",
+        text: "Please fill out transaction ID, amount, and details before adding.",
+      });
+    }
+    addMutation.mutate({ ...form, vendorId: Number(id) });
+  };
+
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    if (!editForm.amount || !editForm.details || !editForm.transactionId) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Missing Fields",
+        text: "Please fill out transaction ID, amount, and details before saving.",
+      });
+    }
+    editMutation.mutate({ ...editForm });
+  };
 
   const handleDelete = (tid) => {
     Swal.fire({
@@ -79,59 +155,20 @@ export default function VendorTransactionPage() {
       cancelButtonColor: "#3085d6",
       confirmButtonText: "Yes, delete it!",
     }).then((result) => {
-      if (result.isConfirmed) {
-        Swal.fire({
-          title: "Deleting...",
-          allowOutsideClick: false,
-          didOpen: () => Swal.showLoading(),
-        });
-        deleteMutation.mutate(tid);
-      }
+      if (result.isConfirmed) deleteMutation.mutate(tid);
     });
   };
-  const editMutation = useMutation({
-    mutationFn: async (payload) => {
-      await fetch("/api/vendor/transactions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["vendorTransactions", id]);
-      setShowEdit(false);
-      setEditForm(null);
-    },
-  });
 
-  if (isLoading) return <div className="p-6"></div>;
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.amount) {
-      Swal.fire({
-        icon: "warning",
-        title: "Missing Fields",
-        text: "Please fill out both the amount and note before adding.",
-      });
-      return;
-    }
-    addMutation.mutate({ ...form, vendorId: Number(id) });
-  };
-
-  const handleEditSubmit = (e) => {
-    e.preventDefault();
-    editMutation.mutate({ ...editForm });
-  };
+  if (isLoading) return <div className="p-6">Loading...</div>;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className={`${fonts.montserrat.className} text-2xl  `}>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className={`${fonts.montserrat.className} text-2xl font-bold mb-2`}>
         {data.vendor.name} - Transactions
       </h1>
       <p className="text-gray-600 mb-6">
-        Balance:{" "}
-        <span className="font-semibold text-green-600 number-font ">
+        Current Balance:{" "}
+        <span className="font-semibold text-green-600 number-font">
           {data.vendor.currency} {Number(data.vendor.balance).toLocaleString()}
         </span>
       </p>
@@ -139,91 +176,144 @@ export default function VendorTransactionPage() {
       {/* Add Transaction Form */}
       <form
         onSubmit={handleSubmit}
-        className="mb-6 flex flex-col sm:flex-row gap-3"
+        className="mb-6 grid grid-cols-1 md:grid-cols-6 gap-3 bg-gray-50 p-4 rounded-lg shadow"
       >
         <select
           value={form.type}
           onChange={(e) => setForm({ ...form, type: e.target.value })}
-          className="outline-SecondaryButton p-2 px-4 rounded w-full sm:w-auto"
+          className="border p-2 rounded-md"
         >
-          <option value="credit">Credit (+) </option>
-          <option value="debit">Debit (-) </option>
+          <option value="credit">Credit (+)</option>
+          <option value="debit">Debit (-)</option>
         </select>
+        <input
+          type="text"
+          value={form.transactionId}
+          onChange={(e) => setForm({ ...form, transactionId: e.target.value })}
+          placeholder="Transaction ID"
+          className="border p-2 rounded-md"
+        />
         <input
           type="number"
           step="0.01"
           value={form.amount}
           onChange={(e) => setForm({ ...form, amount: e.target.value })}
           placeholder="Amount"
-          className="outline-SecondaryButton p-2 rounded w-full sm:w-auto"
+          className="border p-2 rounded-md"
         />
         <input
           type="text"
-          value={form.note}
-          onChange={(e) => setForm({ ...form, note: e.target.value })}
-          placeholder="Note"
-          className="border p-2 outline-SecondaryButton rounded flex-1"
+          value={form.details}
+          onChange={(e) => setForm({ ...form, details: e.target.value })}
+          placeholder="Details"
+          className="border p-2 rounded-md"
+        />
+        <input
+          type="text"
+          value={form.voucherId}
+          onChange={(e) => setForm({ ...form, voucherId: e.target.value })}
+          placeholder="voucherId #"
+          className="border p-2 rounded-md"
         />
         <button
           type="submit"
-          className=" bg-SecondaryButton text-white px-8  py-2 rounded hover:bg-SecondaryButtonHover w-full sm:w-auto flex items-center justify-center"
+          className="bg-SecondaryButton text-white px-6 py-2 rounded-md hover:bg-SecondaryButtonHover"
           disabled={addMutation.isPending}
         >
-          {addMutation.isPending ? (
-            <span className="border-t-transparent border-white">
-              Loading...
-            </span>
-          ) : (
-            "Add"
-          )}
+          {addMutation.isPending ? "Saving..." : "Add"}
         </button>
       </form>
 
       {/* Transaction List */}
-      <div className="hidden sm:block overflow-x-auto">
-        {data.transactions.length === 0 && (
-          <p className="p-6 w-full flex justify-center items-center text-xl">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        {!data?.transactions?.length ? (
+          <p className="p-6 text-center text-gray-500">
             No transactions found.
           </p>
-        )}
-        {data.transactions.length > 0 && (
-          <table className="w-full border border-gray-200 shadow-sm rounded">
+        ) : (
+          <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-100 text-left">
-                <th className="p-2 border">Date</th>
-                <th className="p-2 border">Type</th>
-                <th className="p-2 border">Amount</th>
-                <th className="p-2 border">Note</th>
-                <th className="p-2 border">Actions</th>
+              <tr
+                className={`${fonts.poppins.className} bg-gray-50 text-gray-700`}
+              >
+                <th className="p-3 text-left">Date</th>
+                <th className="p-3 text-left">Transaction ID</th>
+                <th className="p-3 text-left">Voucher ID</th>
+                <th className="p-3 text-left">Details</th>
+                <th className="p-3 text-right">
+                  Credit({data.vendor.currency})
+                </th>
+                <th className="p-3 text-right">
+                  Debit({data.vendor.currency})
+                </th>
+                <th className="p-3 text-right">
+                  Balance({data.vendor.currency})
+                </th>
+                <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {data.transactions.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="p-2 border number-font">
-                    {new Date(t.createdAt).toLocaleDateString()}
+              {data.transactions.map((t, idx) => (
+                <tr
+                  key={t.id}
+                  className={`${
+                    idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                  } hover:bg-gray-100 transition`}
+                >
+                  <td className="p-3">
+                    {new Date(t.createdAt).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
                   </td>
-                  <td className="p-2 border capitalize">{t.type}</td>
-                  <td className="p-2 border font-medium number-font ">
-                    {data.vendor.currency} {Number(t.amount).toLocaleString()}
+                  <td className="p-3">{t.transactionId || "-"}</td>
+                  <td className="p-3">{t.voucherId || "-"}</td>
+                  <td className="p-3 text-gray-700">{t.details}</td>
+                  <td className="p-3 text-right">
+                    {t.type === "credit" && (
+                      <span className="px-2 py-1 text-green-700 bg-green-100 rounded-full text-sm font-semibold number-font">
+                        {Number(t.amount).toLocaleString()}
+                      </span>
+                    )}
                   </td>
-                  <td className="p-2 border">{t.note}</td>
-                  <td className="p-2 border flex gap-2">
+                  <td className="p-3 text-right">
+                    {t.type === "debit" && (
+                      <span className="px-2 py-1 text-red-700 bg-red-100 rounded-full text-sm font-semibold number-font">
+                        {Number(t.amount).toLocaleString()}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right number-font font-semibold  text-gray-800">
+                    <AnimatePresence>
+                      <motion.div
+                        key={t.balanceAfter}
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        transition={{ duration: 0.8 }}
+                      >
+                        {Number(t.balanceAfter).toLocaleString()}
+                      </motion.div>
+                    </AnimatePresence>
+                  </td>
+                  <td className="p-3 text-center flex justify-center gap-3">
                     <button
                       onClick={() => {
                         setEditForm(t);
                         setShowEdit(true);
                       }}
-                      className="text-blue-500 hover:underline"
+                      className="text-blue-500 hover:text-blue-700 transition"
+                      title="Edit transaction"
                     >
-                      Edit
+                      ✏️
                     </button>
-                    |{" "}
                     <button
                       onClick={() => handleDelete(t.id)}
-                      className="text-red-500 hover:underline"
+                      className="text-red-500 hover:text-red-700 transition"
+                      title="Delete transaction"
                     >
-                      Delete
+                      🗑️
                     </button>
                   </td>
                 </tr>
@@ -231,43 +321,6 @@ export default function VendorTransactionPage() {
             </tbody>
           </table>
         )}
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="sm:hidden space-y-4">
-        {data.transactions.map((t) => (
-          <div
-            key={t.id}
-            className="border border-gray-200 rounded-lg p-4 shadow-sm bg-white"
-          >
-            <p className="text-sm text-gray-500">
-              {new Date(t.createdAt).toLocaleDateString()}
-            </p>
-            <p className="font-semibold capitalize">{t.type}</p>
-            <p className="text-green-600 font-bold">
-              {data.vendor.currency} {Number(t.amount).toLocaleString()}
-            </p>
-            <p className="text-gray-700">{t.note}</p>
-            <div className="flex gap-4 mt-2">
-              <button
-                onClick={() => {
-                  setEditForm(t);
-                  setShowEdit(true);
-                }}
-                className="text-blue-500 hover:underline text-sm"
-              >
-                Edit
-              </button>
-              {" | "}
-              <button
-                onClick={() => handleDelete(t.id)}
-                className="text-red-500 hover:underline text-sm"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Edit Modal */}
@@ -287,6 +340,15 @@ export default function VendorTransactionPage() {
                 <option value="debit">Debit</option>
               </select>
               <input
+                type="text"
+                value={editForm.transactionId || ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, transactionId: e.target.value })
+                }
+                placeholder="Transaction ID"
+                className="border p-2 rounded"
+              />
+              <input
                 type="number"
                 step="0.01"
                 value={editForm.amount}
@@ -297,10 +359,20 @@ export default function VendorTransactionPage() {
               />
               <input
                 type="text"
-                value={editForm.note || ""}
+                value={editForm.details || ""}
                 onChange={(e) =>
-                  setEditForm({ ...editForm, note: e.target.value })
+                  setEditForm({ ...editForm, details: e.target.value })
                 }
+                placeholder="Details"
+                className="border p-2 rounded"
+              />
+              <input
+                type="text"
+                value={editForm.voucherId || ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, voucherId: e.target.value })
+                }
+                placeholder="voucherId #"
                 className="border p-2 rounded"
               />
               <div className="flex justify-end gap-2 mt-4">
