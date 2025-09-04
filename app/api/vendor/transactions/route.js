@@ -6,23 +6,6 @@ export async function POST(req) {
     await req.json();
   const parsedAmount = parseFloat(amount);
 
-  // Get vendor current balance
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: vendorId },
-    select: { balance: true },
-  });
-
-  if (!vendor) {
-    return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-  }
-
-  // Compute new balance
-  const newBalance =
-    type === "credit"
-      ? vendor.balance + parsedAmount
-      : vendor.balance - parsedAmount;
-
-  // Create transaction with balanceAfter
   const transaction = await prisma.transaction.create({
     data: {
       vendorId,
