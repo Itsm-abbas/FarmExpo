@@ -181,7 +181,7 @@ export default function VendorTransactionPage() {
         <select
           value={form.type}
           onChange={(e) => setForm({ ...form, type: e.target.value })}
-          className="border p-2 rounded-md"
+          className="border p-2 rounded-md text-gray-700"
         >
           <option value="credit">Credit (+)</option>
           <option value="debit">Debit (-)</option>
@@ -260,15 +260,17 @@ export default function VendorTransactionPage() {
                     idx % 2 === 0 ? "bg-white" : "bg-gray-50"
                   } hover:bg-gray-100 transition`}
                 >
-                  <td className="p-3">
+                  <td className="p-3 text-gray-700">
                     {new Date(t.createdAt).toLocaleDateString("en-GB", {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
                     })}
                   </td>
-                  <td className="p-3">{t.transactionId || "-"}</td>
-                  <td className="p-3">{t.voucherId || "-"}</td>
+                  <td className="p-3 text-gray-700">
+                    {t.transactionId || "-"}
+                  </td>
+                  <td className="p-3 text-gray-700">{t.voucherId || "-"}</td>
                   <td className="p-3 text-gray-700">{t.details}</td>
                   <td className="p-3 text-right">
                     {t.type === "credit" && (
