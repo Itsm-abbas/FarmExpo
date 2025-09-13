@@ -13,7 +13,7 @@ const ReusableTable = ({
   isLoading,
   addButton,
   noDataMessage = "No data found",
-  itemsPerPage = 5,
+  itemsPerPage = 10,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
