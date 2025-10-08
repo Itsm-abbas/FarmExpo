@@ -12,7 +12,6 @@ export async function POST(req) {
   try {
     const body = await req.json();
     const { name, packagingWeightPerUnit } = body;
-
     if (!name || !packagingWeightPerUnit) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }

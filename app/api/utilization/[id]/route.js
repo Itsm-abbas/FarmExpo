@@ -7,10 +7,11 @@ export async function PUT(req, { params }) {
     let { id } = await params;
     id = Number(id);
     const data = await req.json();
-
-    const existingUtil = await prisma.utilization.findUnique({
-      where: { id },
-    });
+    const existingUtil = await prisma.financialInstrumentUtilization.findUnique(
+      {
+        where: { id },
+      }
+    );
 
     if (!existingUtil) {
       return NextResponse.json(
@@ -20,7 +21,7 @@ export async function PUT(req, { params }) {
     }
 
     const financialInstrument = await prisma.financialInstrument.findUnique({
-      where: { id: data.financialInstrumentId },
+      where: { id: data.financialInstrument.id },
     });
 
     if (!financialInstrument) {
@@ -45,12 +46,12 @@ export async function PUT(req, { params }) {
 
     // Update financial instrument balance
     await prisma.financialInstrument.update({
-      where: { id: data.financialInstrumentId },
+      where: { id: data.financialInstrument.id },
       data: { balance: newBalance },
     });
 
     // Update the utilization
-    const updated = await prisma.utilization.update({
+    const updated = await prisma.financialInstrumentUtilization.update({
       where: { id },
       data: {
         financialInstrumentId: data.financialInstrumentId,

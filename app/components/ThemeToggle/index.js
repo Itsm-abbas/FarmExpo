@@ -1,6 +1,5 @@
 import { useTheme } from "@context/ThemeContext";
 import { FaSun, FaMoon } from "react-icons/fa"; // Import icons
-import fonts from "@utils/fonts"; // Import fonts
 import { motion } from "framer-motion"; // Import Framer Motion
 
 export default function ThemeToggle() {
@@ -15,7 +14,7 @@ export default function ThemeToggle() {
     >
       <motion.button
         onClick={toggleTheme}
-        className={`${fonts.poppins.className} flex items-center gap-2 p-2 px-4 bg-DarkPBg dark:bg-LightPBg rounded-md text-DarkPText dark:text-LightPText transition-all`}
+        className={`font-poppins flex items-center gap-2 p-2 px-4 bg-DarkPBg dark:bg-LightPBg rounded-md text-DarkPText dark:text-LightPText transition-all`}
         whileTap={{
           scale: 0.95,
           rotate: 10,

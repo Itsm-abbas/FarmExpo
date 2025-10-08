@@ -1,10 +1,20 @@
 // app/api/vendor/transactions/route.js
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
+// app/api/vendor/transactions/route.js - Update POST handler
+
 export async function POST(req) {
-  const { vendorId, transactionId, voucherId, type, amount, details } =
-    await req.json();
+  const {
+    vendorId,
+    transactionId,
+    voucherId,
+    type,
+    amount,
+    details,
+    consignmentId,
+  } = await req.json();
   const parsedAmount = parseFloat(amount);
+
   // Get vendor current balance
   const vendor = await prisma.vendor.findUnique({
     where: { id: vendorId },
@@ -15,13 +25,13 @@ export async function POST(req) {
     return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
   }
 
-  // Compute new balance
+  // Compute new balance (ADD to existing balance)
   const newBalance =
     type === "credit"
       ? vendor.balance + parsedAmount
       : vendor.balance - parsedAmount;
 
-  // Create transaction with balanceAfter
+  // Create transaction with balanceAfter and consignmentId
   const transaction = await prisma.transaction.create({
     data: {
       vendorId,
@@ -31,10 +41,11 @@ export async function POST(req) {
       amount: parsedAmount,
       details,
       balanceAfter: newBalance,
+      consignmentId: consignmentId ? parseInt(consignmentId) : null, // Add consignment reference
     },
   });
 
-  // Update vendor balance
+  // Update vendor balance (this adds to existing balance)
   await prisma.vendor.update({
     where: { id: vendorId },
     data: { balance: newBalance },
@@ -42,7 +53,6 @@ export async function POST(req) {
 
   return NextResponse.json(transaction);
 }
-
 export async function PUT(req) {
   const { id, type, amount, details, transactionId, voucherId } =
     await req.json();
@@ -66,12 +76,12 @@ export async function PUT(req) {
     orderBy: { createdAt: "desc" },
   });
 
-  if (!lastTransaction || lastTransaction.id !== existing.id) {
-    return NextResponse.json(
-      { error: "Only the most recent transaction can be updated" },
-      { status: 400 }
-    );
-  }
+  // if (!lastTransaction || lastTransaction.id !== existing.id) {
+  //   return NextResponse.json(
+  //     { error: "Only the most recent transaction can be updated" },
+  //     { status: 400 }
+  //   );
+  // }
 
   // Reverse old effect on vendor balance
   await prisma.vendor.update({
@@ -136,12 +146,12 @@ export async function DELETE(req) {
     orderBy: { createdAt: "desc" },
   });
 
-  if (!lastTransaction || lastTransaction.id !== existing.id) {
-    return NextResponse.json(
-      { error: "Only the latest transaction can be deleted" },
-      { status: 400 }
-    );
-  }
+  // if (!lastTransaction || lastTransaction.id !== existing.id) {
+  //   return NextResponse.json(
+  //     { error: "Only the latest transaction can be deleted" },
+  //     { status: 400 }
+  //   );
+  // }
 
   // Reverse balance effect
   await prisma.vendor.update({

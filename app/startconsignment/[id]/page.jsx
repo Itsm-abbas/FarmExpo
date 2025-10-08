@@ -1,3 +1,5 @@
+// app/startconsignment/[id]/page.jsx
+
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -14,9 +16,15 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaLock,
+  FaFileInvoice,
+  FaBox,
+  FaShippingFast,
+  FaClipboardCheck,
+  FaDollarSign,
+  FaExclamationTriangle,
+  FaReceipt,
 } from "react-icons/fa";
 import GoodsDeclarationForm from "@forms/StartConsignment/GoodsDeclaration";
-import font from "@utils/fonts";
 import Link from "next/link";
 import DamageForm from "@components/Forms/StartConsignment/Damage";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,50 +33,77 @@ import Swal from "sweetalert2";
 import DailyExpenses from "@components/Forms/StartConsignment/DailyExpenses";
 
 const formsData = [
-  { id: 1, name: "Trader", component: TraderForm, key: "trader" },
-  { id: 2, name: "Consignee", component: ConsigneeForm, key: "consignee" },
+  {
+    id: 1,
+    name: "Trader",
+    component: TraderForm,
+    key: "trader",
+    icon: FaReceipt,
+    description: "Add trading partner details and information",
+  },
+  {
+    id: 2,
+    name: "Consignee",
+    component: ConsigneeForm,
+    key: "consignee",
+    icon: FaShippingFast,
+    description: "Enter consignee information and destination details",
+  },
   {
     id: 3,
-    name: "Airway Bill/Seaway Bill",
+    name: "Airway Bill",
     component: AirwayBill,
     key: "airwayBill",
+    icon: FaClipboardCheck,
+    description: "Add airway bill or seaway bill details",
   },
   {
     id: 4,
     name: "Goods Declaration",
     component: GoodsDeclarationForm,
     key: "goodsDeclaration",
+    icon: FaBox,
+    description: "Declare goods and commercial invoice information",
   },
   {
     id: 5,
     name: "Custom Clearance",
     component: CustomClearence,
     key: "customClearance",
+    icon: FaClipboardCheck,
+    description: "Custom clearance and documentation details",
   },
-  { id: 6, name: "Packing", component: Packing, key: "packing" },
+  {
+    id: 6,
+    name: "Packing",
+    component: Packing,
+    key: "packing",
+    icon: FaBox,
+    description: "Packing details and specifications",
+  },
   {
     id: 9,
     name: "Daily Expenses",
     component: DailyExpenses,
     key: "dailyExpenses",
+    icon: FaDollarSign,
+    description: "Record daily operational expenses",
   },
-  // {
-  //   id: 9,
-  //   name: "Packaging",
-  //   component: PackagingForm,
-  //   key: "goods/packaging",
-  // },
   {
     id: 7,
     name: "Recovery",
     component: RecoveryDoneForm,
     key: "recoveryDone",
+    icon: FaDollarSign,
+    description: "Payment recovery and financial settlements",
   },
   {
     id: 8,
     name: "Damage",
     component: DamageForm,
     key: "goods/damage",
+    icon: FaExclamationTriangle,
+    description: "Report damaged goods and losses",
   },
 ];
 
@@ -77,17 +112,31 @@ export default function StartConsignmentPage() {
   const consignmentId = params.id;
   const [formStatuses, setFormStatuses] = useState({});
   const [activeAccordion, setActiveAccordion] = useState(null);
-  const accordionRefs = useRef({}); // Store refs for each accordion
+  const accordionRefs = useRef({});
   const [itemsLength, setItemsLength] = useState(0);
-  const [isFulfilled, setIsFulfilled] = useState(false); // Track if status is 'fulfilled'
+  const [isFulfilled, setIsFulfilled] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const fetchFormStatuses = async () => {
     try {
       const response = await axiosInstance.get(`/consignment/${consignmentId}`);
       const { data } = response;
       setFormStatuses(data);
-      setItemsLength(data.goods.length);
-      setIsFulfilled(data.status === "Fulfilled"); // Check if status is 'fulfilled'
+      setItemsLength(data.goods?.length || 0);
+      setIsFulfilled(data.status === "Fulfilled");
+
+      // Calculate progress
+      const completedForms = formsData.filter((form) => {
+        if (form.key === "goods/packaging") {
+          return data.goods?.some((item) => item?.packaging);
+        }
+        if (form.key === "goods/damage") {
+          return data.goods?.some((item) => item?.damage);
+        }
+        return data[form.key];
+      }).length;
+
+      setProgress(Math.round((completedForms / formsData.length) * 100));
     } catch (error) {
       console.error("Error fetching statuses:", error);
     }
@@ -98,168 +147,290 @@ export default function StartConsignmentPage() {
   }, []);
 
   const toggleAccordion = (id) => {
-    // Check if the form is locked (status is 'fulfilled' and form is not Recovery or Damage)
     const form = formsData.find((f) => f.id === id);
     const isLocked =
       isFulfilled && form.key !== "recoveryDone" && form.key !== "goods/damage";
 
-    // If the accordion is already open, minimize it without showing the modal
     if (activeAccordion === id) {
       setActiveAccordion(null);
       return;
     }
 
-    // If the form is locked and the accordion is closed, show the confirmation modal
     if (isLocked && activeAccordion !== id) {
       Swal.fire({
-        title: "Are you sure?",
-        text: "This consignment is marked as fulfilled. Are you sure you want to edit this?",
+        title: "Consignment Locked",
+        text: "This consignment is marked as fulfilled. Editing completed forms may affect financial records.",
         icon: "warning",
         showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, edit it!",
+        confirmButtonColor: "rgb(var(--color-primary))",
+        cancelButtonColor: "rgb(var(--color-accent))",
+        confirmButtonText: "Continue Editing",
+        cancelButtonText: "Cancel",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
       }).then((result) => {
         if (result.isConfirmed) {
-          setActiveAccordion(id); // Open the accordion
+          setActiveAccordion(id);
+          setTimeout(() => {
+            accordionRefs.current[id]?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 300);
         }
       });
     } else {
-      setActiveAccordion(id); // Open the accordion
+      setActiveAccordion(id);
+      setTimeout(() => {
+        accordionRefs.current[id]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 300);
     }
-
-    // Scroll the accordion into view
-    setTimeout(() => {
-      accordionRefs.current[id]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 300); // Delay allows animation to start before scrolling
   };
 
+  const getFormStatus = (formKey) => {
+    if (formKey === "goods/packaging") {
+      return formStatuses.goods?.some((item) => item?.packaging);
+    }
+    if (formKey === "goods/damage") {
+      return formStatuses.goods?.some((item) => item?.damage);
+    }
+    return formStatuses[formKey];
+  };
+
+  const completedForms = formsData.filter((form) =>
+    getFormStatus(form.key)
+  ).length;
+  const totalForms = formsData.length;
+
   return (
-    <div
-      className={`${font.lato.className} min-h-screen dark:bg-gray-800 text-LightPText dark:text-DarkPText py-8`}
-    >
-      <h1 className="text-3xl font-bold text-center mb-8">
-        Create Consignment
-      </h1>
+    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* Header Section */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center space-y-4"
+        >
+          <h1 className="text-4xl font-bold font-poppins text-text">
+            Create Consignment
+          </h1>
+          <p className="text-text/70 font-inter text-lg">
+            Complete all sections to finalize your consignment
+          </p>
+        </motion.div>
 
-      <div className="flex flex-col gap-5">
-        <div className="flex justify-center">
-          {/* Consignment items */}
-          <Link href={`/items-selection/${consignmentId}`}>
-            <button
-              className={`px-6 py-3 rounded-lg text-white capitalize font-medium transition-all duration-300 ${
-                itemsLength > 0
-                  ? "bg-blue-500 hover:bg-blue-600"
-                  : "bg-SecondaryButton hover:bg-SecondaryButtonHover"
-              }`}
-            >
-              {itemsLength > 0
-                ? "Click to update consignment items"
-                : "Click to add consignment items"}
-            </button>
-          </Link>
-        </div>
-        {/* Accordion */}
-        {formsData.map((form) => {
-          const FormComponent = form.component;
-          const isSubmitted =
-            form.key === "goods/packaging"
-              ? formStatuses.goods?.some((item) => item?.packaging)
-              : form.key === "goods/damage"
-              ? formStatuses.goods?.some((item) => item?.damage)
-              : formStatuses[form.key];
+        {/* Progress Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="bg-background rounded-2xl border border-primary/20 shadow-lg p-6"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="space-y-3">
+              <h3 className="text-xl font-semibold font-poppins text-text">
+                Consignment Progress
+              </h3>
+              <p className="text-text/70 font-inter">
+                {completedForms} of {totalForms} sections completed
+              </p>
+            </div>
 
-          // Check if the form is locked
-          const isLocked =
-            isFulfilled &&
-            form.key !== "recoveryDone" &&
-            form.key !== "goods/damage";
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Link href={`/items-selection/${consignmentId}`}>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-poppins font-medium transition-all duration-300 ${
+                    itemsLength > 0
+                      ? "bg-primary text-white hover:bg-primary/90 shadow-lg"
+                      : "bg-accent text-white hover:bg-accent/90 shadow-lg"
+                  }`}
+                >
+                  <FaBox className="text-sm" />
+                  {itemsLength > 0
+                    ? "Update Consignment Items"
+                    : "Add Consignment Items"}
+                </motion.button>
+              </Link>
+            </div>
+          </div>
 
-          return (
-            <div
-              key={form.id}
-              ref={(el) => (accordionRefs.current[form.id] = el)} // Assign ref for scrolling
-              className="rounded-lg"
-            >
-              <div
-                className={`rounded-lg p-4 cursor-pointer flex justify-between items-center ${
-                  isSubmitted
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#10B981] border-2"
-                    : activeAccordion === form.id
-                    ? "bg-gray-300 dark:bg-gray-700"
-                    : "bg-gray-200 dark:bg-gray-600"
-                }`}
-                onClick={() => toggleAccordion(form.id)}
+          {/* Progress Bar */}
+          <div className="mt-6 space-y-2">
+            <div className="flex justify-between text-sm font-inter">
+              <span className="text-text/70">Completion Progress</span>
+              <span className="text-text font-medium">{progress}%</span>
+            </div>
+            <div className="w-full bg-primary/20 rounded-full h-3">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 1, ease: "easeOut" }}
+                className="bg-primary h-3 rounded-full shadow-lg"
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Forms Accordion */}
+        <div className="space-y-4">
+          {formsData.map((form) => {
+            const FormComponent = form.component;
+            const FormIcon = form.icon;
+            const isSubmitted = getFormStatus(form.key);
+            const isLocked =
+              isFulfilled &&
+              form.key !== "recoveryDone" &&
+              form.key !== "goods/damage";
+
+            return (
+              <motion.div
+                key={form.id}
+                ref={(el) => (accordionRefs.current[form.id] = el)}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: form.id * 0.1 }}
+                className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
               >
-                <h2 className="text-lg flex items-center">
-                  {isSubmitted ? (
-                    <>
-                      <span className="line-through mr-4 text-sm text-gray-600">
-                        Add {form.name}
-                      </span>
-                      <span className="text-sm md:text-lg">Submitted</span>
-                    </>
-                  ) : (
-                    <p>Add {form.name}</p>
-                  )}
-                  <span className="ml-2 text-sm md:text-lg">
-                    {isSubmitted != null && isSubmitted != 0 && <FaCheck />}
-                  </span>
-                </h2>
-                <span className="text-sm">
-                  {activeAccordion === form.id ? (
-                    <div className="flex gap-1 items-center">
-                      <span>Minimize</span>
-                      <FaChevronUp />
+                {/* Accordion Header */}
+                <div
+                  className={`p-6 cursor-pointer transition-all duration-300 ${
+                    isSubmitted
+                      ? "bg-primary/10 border-l-4 border-primary"
+                      : activeAccordion === form.id
+                      ? "bg-primary/5"
+                      : "hover:bg-primary/5"
+                  } ${isLocked ? "opacity-80" : ""}`}
+                  onClick={() => toggleAccordion(form.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`p-3 rounded-xl ${
+                          isSubmitted
+                            ? "bg-primary text-white"
+                            : "bg-primary/10 text-primary"
+                        }`}
+                      >
+                        <FormIcon className="text-lg" />
+                      </div>
+
+                      <div className="space-y-1">
+                        <h3 className="text-lg font-semibold font-poppins text-text flex items-center gap-2">
+                          {form.name}
+                          {isSubmitted && (
+                            <motion.span
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1"
+                            >
+                              <FaCheck size={10} />
+                              Completed
+                            </motion.span>
+                          )}
+                          {isLocked && (
+                            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                              <FaLock size={10} />
+                              Locked
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-text/70 font-inter text-sm">
+                          {form.description}
+                        </p>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      {isLocked ? (
-                        <span className="flex items-center justify-center ">
-                          Locked
-                          <FaLock className="ml-2" />
-                        </span>
+
+                    <div className="flex items-center gap-3">
+                      {activeAccordion === form.id ? (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="flex items-center gap-2 text-primary font-inter text-sm"
+                        >
+                          <span>Minimize</span>
+                          <FaChevronUp className="text-sm" />
+                        </motion.div>
                       ) : (
-                        <span className="flex items-center justify-center gap-2">
-                          {isSubmitted ? "Click to Edit" : "Expand"}{" "}
-                          <FaChevronDown />
-                        </span>
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="flex items-center gap-2 text-text/70 font-inter text-sm"
+                        >
+                          {isLocked ? (
+                            <span className="flex items-center gap-2 text-red-500">
+                              <FaLock className="text-sm" />
+                              View Only
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              {isSubmitted ? "Edit Section" : "Expand"}
+                              <FaChevronDown className="text-sm" />
+                            </span>
+                          )}
+                        </motion.div>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* Accordion Content */}
+                <AnimatePresence>
+                  {activeAccordion === form.id && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                      className="border-t border-primary/10"
+                    >
+                      <div className="p-6">
+                        <FormComponent
+                          consignmentId={consignmentId}
+                          existingData={isSubmitted || null}
+                          setFormStatuses={setFormStatuses}
+                          setActiveAccordion={setActiveAccordion}
+                          formStatus={formStatuses}
+                          isLocked={isLocked}
+                        />
+                      </div>
+                    </motion.div>
                   )}
-                </span>
-              </div>
-              <AnimatePresence>
-                {activeAccordion === form.id && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="p-4 bg-white dark:bg-[#2d3748] text-[#e5e7eb] flex items-center justify-center overflow-hidden"
-                  >
-                    <FormComponent
-                      consignmentId={consignmentId}
-                      existingData={isSubmitted || null}
-                      setFormStatuses={setFormStatuses}
-                      setActiveAccordion={setActiveAccordion}
-                      formStatus={formStatuses}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-        <div className="flex justify-end mt-4">
-          <Link href={`/invoice/${consignmentId}`}>
-            <button className="px-4 py-2 flex items-center gap-2 bg-purple-600 text-white font-semibold rounded-sm shadow-md hover:bg-purple-700 transition">
-              Generate Invoice <FaArrowRight />
-            </button>
-          </Link>
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
         </div>
+
+        {/* Action Footer */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-primary/10"
+        >
+          <div className="text-text/70 font-inter text-sm">
+            Consignment ID:{" "}
+            <span className="font-mono text-text">{consignmentId}</span>
+          </div>
+
+          <Link href={`/invoice/${consignmentId}`}>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="flex items-center gap-3 px-6 py-3 bg-primary text-white font-poppins font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-primary/90"
+            >
+              <FaFileInvoice className="text-lg" />
+              Generate Invoice
+              <FaArrowRight className="text-sm" />
+            </motion.button>
+          </Link>
+        </motion.div>
       </div>
     </div>
   );

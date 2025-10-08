@@ -1,3 +1,5 @@
+// app/api/consignee/route.js
+
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
 export async function GET() {
@@ -25,6 +27,7 @@ export async function POST(req) {
       consigneeId: consignee.id,
     });
   } catch (error) {
+    console.log(error);
     return NextResponse.json(
       { error: "Failed to create consignee" },
       { status: 500 }

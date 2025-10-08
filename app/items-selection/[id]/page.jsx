@@ -3,19 +3,28 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Swal from "sweetalert2";
-import font from "@utils/fonts";
 import DataLoader from "@components/Loader/dataLoader";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Input from "@components/Input";
 import { getCookie } from "cookies-next";
-import { FaArrowRight, FaEdit, FaTrash, FaPlus } from "react-icons/fa";
+import {
+  FaArrowRight,
+  FaEdit,
+  FaTrash,
+  FaPlus,
+  FaBox,
+  FaWeight,
+  FaMoneyBill,
+  FaTag,
+  FaSearch,
+  FaFilter,
+} from "react-icons/fa";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchConsignmentById,
   fetchConsignments,
 } from "@constants/consignmentAPI";
-import { LoaderIcon } from "react-hot-toast";
 
 export default function ItemSelectionPage() {
   const router = useRouter();
@@ -34,6 +43,10 @@ export default function ItemSelectionPage() {
     packagingPerUnitCost: "",
     packaging: null,
   });
+
+  // Search and Filter States
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterSelected, setFilterSelected] = useState("all"); // "all", "selected", "unselected"
 
   const {
     data: items = [],
@@ -116,6 +129,40 @@ export default function ItemSelectionPage() {
 
   const isLoading =
     isLoadingCommodities || isLoadingPackaging || isLoadingGoods;
+
+  // Filter items based on search and filter criteria
+  const filteredItems = items.filter((item) => {
+    // Search filter
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.number.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Selection filter
+    const isSelected = selectedItems[item.id]?.length > 0;
+
+    if (filterSelected === "selected") {
+      return matchesSearch && isSelected;
+    } else if (filterSelected === "unselected") {
+      return matchesSearch && !isSelected;
+    }
+
+    return matchesSearch; // "all" filter
+  });
+
+  // Get stats for the filter buttons
+  const getFilterStats = () => {
+    const totalItems = items.length;
+    const selectedItemsCount = items.filter(
+      (item) => selectedItems[item.id]?.length > 0
+    ).length;
+    const unselectedItemsCount = totalItems - selectedItemsCount;
+
+    return { totalItems, selectedItemsCount, unselectedItemsCount };
+  };
+
+  const { totalItems, selectedItemsCount, unselectedItemsCount } =
+    getFilterStats();
+
   const handleItemSelect = (item) => {
     setCurrentItem(item);
     if (selectedItems[item.id]?.length > 0) {
@@ -166,14 +213,13 @@ export default function ItemSelectionPage() {
       text: "You won't be able to revert this!",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#3085d6",
-      cancelButtonColor: "#d33",
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#6b7280",
       confirmButtonText: "Yes, delete it!",
     });
 
     if (result.isConfirmed) {
       try {
-        // ✅ 1. Delete the item from /consignmentitem first
         const deleteResponse = await fetch(`/api/consignmentitem/${detailId}`, {
           method: "DELETE",
           headers: {
@@ -184,7 +230,6 @@ export default function ItemSelectionPage() {
 
         if (!deleteResponse.ok) throw new Error("Failed to delete item");
 
-        // ✅ 2. Refetch the updated consignment
         const response = await fetch(`/api/consignment/${id}`, {
           headers: {
             "Content-Type": "application/json",
@@ -197,7 +242,6 @@ export default function ItemSelectionPage() {
 
         const updatedConsignment = await response.json();
 
-        // ✅ 3. Sync updated state in the UI
         const existingItems = updatedConsignment.goods?.reduce((acc, good) => {
           if (!acc[good.commodityItem.id]) {
             acc[good.commodityItem.id] = [];
@@ -278,38 +322,10 @@ export default function ItemSelectionPage() {
 
         if (!itemResponse.ok) throw new Error("Failed to save item");
         const savedItem = await itemResponse.json();
-        console.log("Saved Item:", savedItem);
+
         if (!savedItem?.commodityItem?.id || !savedItem?.packaging?.id) {
           throw new Error("Invalid item data returned from server");
         }
-
-        // Update the consignment's goods array
-        let updatedGoods = [...(consignmentData.goods || [])];
-
-        if (existingItemId) {
-          updatedGoods = updatedGoods.map((g) =>
-            g.id === existingItemId ? { ...g, ...savedItem } : g
-          );
-        } else {
-          updatedGoods.push(savedItem);
-        }
-
-        const updatedConsignment = {
-          ...consignmentData,
-          goods: updatedGoods,
-        };
-
-        const consignmentUpdateRes = await fetch(`/api/consignment/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updatedConsignment),
-        });
-
-        if (!consignmentUpdateRes.ok)
-          throw new Error("Failed to update consignment");
 
         const fetchConsignment = async () => {
           const response = await fetch(`/api/consignment/${id}`, {
@@ -322,14 +338,12 @@ export default function ItemSelectionPage() {
           if (!response.ok) {
             throw new Error("Failed to fetch consignment data.");
           }
-
           return await response.json();
         };
+
         const fetchData = async () => {
           try {
             const [consignmentData] = await Promise.all([fetchConsignment()]);
-
-            // Map existing items with all details
             const existingItems = consignmentData.goods?.reduce((acc, good) => {
               if (!acc[good.commodityItem.id]) {
                 acc[good.commodityItem.id] = [];
@@ -349,26 +363,10 @@ export default function ItemSelectionPage() {
             setSelectedItems(existingItems || {});
           } catch (error) {
             Swal.fire({ icon: "error", title: "Error", text: error.message });
-          } finally {
           }
         };
 
         fetchData();
-        // Update local state
-        // setSelectedItems((prev) => {
-        //   const updatedItems = { ...prev };
-        //   if (!updatedItems[currentItem.id]) {
-        //     updatedItems[currentItem.id] = [];
-        //   }
-
-        //   if (currentDetailIndex !== null) {
-        //     updatedItems[currentItem.id][currentDetailIndex] = savedItem;
-        //   } else {
-        //     updatedItems[currentItem.id].push(savedItem);
-        //   }
-
-        //   return updatedItems;
-        // });
 
         Swal.fire({
           position: "top-center",
@@ -401,152 +399,373 @@ export default function ItemSelectionPage() {
 
   return (
     <motion.div
-      className={`${font.poppins.className} min-h-screen py-8 dark:bg-gray-800 text-LightPText dark:text-DarkPText`}
+      className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8 font-inter"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <motion.h1
-        className="text-3xl font-bold text-center mb-8"
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6 }}
-      >
-        Select Items
-      </motion.h1>
+      {/* Header Section */}
+      <div className="max-w-7xl mx-auto">
+        <motion.div
+          className="text-center mb-8"
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6 }}
+        >
+          <h1 className="text-3xl lg:text-4xl font-poppins font-bold text-text mb-2">
+            Select Items
+          </h1>
+          <p className="text-text/60 text-lg">
+            Choose items for your consignment #{id}
+          </p>
+        </motion.div>
 
-      <motion.div
-        className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 space-y-4 capitalize"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <h2 className="text-xl font-semibold mb-4">Available Items</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-8">
-          {isLoading ? (
-            <div className="col-span-3">
-              <DataLoader />
+        {/* Main Content Card */}
+        <motion.div
+          className="bg-background border-2 border-primary/20 rounded-2xl shadow-xl p-6 space-y-6"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-poppins font-semibold text-text">
+                Available Items
+              </h2>
+              <p className="text-text/60 text-sm mt-1">
+                Click on an item to add details
+              </p>
             </div>
-          ) : (
-            <AnimatePresence>
-              {items?.map((item) => (
-                <motion.div
-                  key={item.id}
-                  className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all duration-200 ${
-                    selectedItems[item.id]
-                      ? "border-green-600 bg-green-100 dark:bg-DarkSBg"
-                      : "border-gray-300 dark:border-gray-700"
-                  }`}
-                  onClick={() => handleItemSelect(item)}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <h3 className="text-lg font-semibold">{item.name}</h3>
-                  <p className="text-sm text-LightPText dark:text-DarkPText">
-                    Item Number: {item.number}
-                  </p>
-                  {selectedItems[item.id] && (
-                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                      {selectedItems[item.id].length}
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
-        </div>
+            <div className="flex items-center gap-3">
+              <span className="text-text/40 text-sm">
+                {filteredItems.length} of {items.length} items
+              </span>
+            </div>
+          </div>
 
-        {/* Detail View Modal */}
+          {/* Search and Filter Section */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Input */}
+            <div className="flex-1 relative">
+              <div className="relative">
+                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text/40 text-sm" />
+                <input
+                  type="text"
+                  placeholder="Search items by name or number..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text/40 hover:text-text/60 transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex gap-2 flex-col md:flex-row">
+              <motion.button
+                onClick={() => setFilterSelected("all")}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium ${
+                  filterSelected === "all"
+                    ? "bg-primary text-white border-primary shadow-lg"
+                    : "bg-background text-text border-primary/20 hover:border-primary/40"
+                }`}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <FaFilter className="text-sm" />
+                All ({totalItems})
+              </motion.button>
+
+              <motion.button
+                onClick={() => setFilterSelected("selected")}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium ${
+                  filterSelected === "selected"
+                    ? "bg-green-500 text-white border-green-500 shadow-lg"
+                    : "bg-background text-text border-green-500/20 hover:border-green-500/40"
+                }`}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <FaBox className="text-sm" />
+                Selected ({selectedItemsCount})
+              </motion.button>
+
+              <motion.button
+                onClick={() => setFilterSelected("unselected")}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium ${
+                  filterSelected === "unselected"
+                    ? "bg-blue-500 text-white border-blue-500 shadow-lg"
+                    : "bg-background text-text border-blue-500/20 hover:border-blue-500/40"
+                }`}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <FaBox className="text-sm" />
+                Available ({unselectedItemsCount})
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Items Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-4">
+            {isLoading ? (
+              <div className="col-span-full flex justify-center py-12">
+                <DataLoader />
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <div className="w-24 h-24 bg-text/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FaSearch className="text-3xl text-text/40" />
+                </div>
+                <h3 className="text-xl font-semibold text-text mb-2">
+                  {searchTerm ? "No items found" : "No items available"}
+                </h3>
+                <p className="text-text/60">
+                  {searchTerm
+                    ? `No items match "${searchTerm}". Try a different search term.`
+                    : "There are no items available for selection."}
+                </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="mt-4 px-6 py-2 bg-primary text-white rounded-lg hover:bg-accent transition-colors"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <AnimatePresence>
+                {filteredItems?.map((item, index) => (
+                  <motion.div
+                    key={item.id}
+                    className={`relative group cursor-pointer rounded-xl p-4 transition-all duration-300 border-2 backdrop-blur-sm ${
+                      selectedItems[item.id]
+                        ? "border-primary bg-primary/10 shadow-lg"
+                        : "border-primary/20 bg-background hover:border-primary/40 hover:shadow-md"
+                    }`}
+                    onClick={() => handleItemSelect(item)}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    whileHover={{
+                      scale: 1.02,
+                      y: -2,
+                    }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {/* Item Badge */}
+                    {selectedItems[item.id] && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-2 -right-2 bg-primary text-white text-xs font-semibold px-2 py-1 rounded-full shadow-lg"
+                      >
+                        {selectedItems[item.id].length}
+                      </motion.div>
+                    )}
+
+                    {/* Item Icon */}
+                    <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl mb-3 group-hover:bg-primary/20 transition-colors">
+                      <FaBox className="text-primary text-lg" />
+                    </div>
+
+                    {/* Item Info */}
+                    <h3 className="font-semibold text-text text-lg mb-1 line-clamp-1">
+                      {item.name}
+                    </h3>
+                    <p className="text-text/60 text-sm">Item #{item.number}</p>
+
+                    {/* Search Highlight */}
+                    {searchTerm && (
+                      <div className="mt-2">
+                        <p className="text-xs text-text/40">
+                          Matches:{" "}
+                          {item.name
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase())
+                            ? "Name"
+                            : ""}
+                          {item.number
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase())
+                            ? " Number"
+                            : ""}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Hover Effect */}
+                    <div className="absolute inset-0 rounded-xl bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t border-primary/10">
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                className="flex items-center gap-2 bg-secondary/10 text-text border-2 border-secondary/20 hover:bg-secondary/20 px-6 py-3 rounded-xl transition-all duration-200 font-medium"
+                href={"/consignment/commodity/add-commodity"}
+              >
+                <FaPlus className="text-sm" />
+                Add New Item
+              </Link>
+            </motion.div>
+
+            <motion.button
+              onClick={handleSave}
+              className="flex items-center gap-3 bg-primary text-white hover:bg-accent px-8 py-3 rounded-xl transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Continue to Consignment
+              <FaArrowRight className="text-sm" />
+            </motion.button>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Details View Modal */}
+      <AnimatePresence>
         {showDetailsView && (
           <motion.div
-            className="fixed inset-0 h-full bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="bg-white dark:bg-gray-800 w-full md:w-2/3 p-6 rounded-lg shadow-lg flex flex-col max-h-[90vh]"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
+              className="bg-background border-2 border-primary/20 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.3 }}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">
-                  Details for {currentItem?.name}
-                </h3>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-primary/10">
+                <div>
+                  <h3 className="text-xl font-poppins font-semibold text-text">
+                    {currentItem?.name} Details
+                  </h3>
+                  <p className="text-text/60 text-sm mt-1">
+                    Manage item specifications and packaging
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowDetailsView(false)}
-                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  className="w-8 h-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all duration-200"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto pr-2">
-                <div className="mb-4">
-                  <button
-                    onClick={handleAddNewDetail}
-                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-md flex items-center gap-1 text-sm"
-                  >
-                    <FaPlus /> Add New Detail
-                  </button>
-                </div>
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Add New Button */}
+                <motion.button
+                  onClick={handleAddNewDetail}
+                  className="flex items-center gap-2 bg-primary text-white hover:bg-accent px-4 py-2 rounded-lg transition-all duration-200 mb-6"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <FaPlus className="text-sm" />
+                  Add New Variation
+                </motion.button>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
-                      <tr>
-                        <th className="px-4 py-2 text-left">Quantity</th>
-                        <th className="px-4 py-2 text-left">Weight/Unit</th>
-                        <th className="px-4 py-2 text-left">Cost/Unit</th>
-                        <th className="px-4 py-2 text-left">Packaging</th>
-                        <th className="px-4 py-2 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                      {isLoadingGoods && <LoaderIcon />}
-                      {!isLoadingGoods &&
-                        selectedItems[currentItem.id]?.map((detail, index) => (
-                          <tr key={detail.id || index}>
-                            <td className="px-4 py-2">{detail.quantity}</td>
-                            <td className="px-4 py-2">
-                              {detail.weightPerUnit} kg
-                            </td>
-                            <td className="px-4 py-2">
-                              {detail.commodityPerUnitCost}
-                            </td>
-                            <td className="px-4 py-2">
-                              {detail.packaging?.name || "N/A"}
-                            </td>
-                            <td className="px-4 py-2 flex gap-2">
-                              <button
-                                onClick={() => handleEditDetail(index)}
-                                className="text-blue-500 hover:text-blue-700"
-                                title="Edit"
-                              >
-                                <FaEdit />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteDetail(detail.id)}
-                                className="text-red-500 hover:text-red-700"
-                                title="Delete"
-                              >
-                                <FaTrash />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                {/* Details Table */}
+                <div className="overflow-hidden rounded-xl border border-primary/10">
+                  <div className="overflow-x-auto">
+                    <table className="w-full font-inter">
+                      <thead>
+                        <tr className="bg-primary/5 border-b border-primary/10">
+                          <th className="px-4 py-3 text-left text-text font-semibold text-sm">
+                            Quantity
+                          </th>
+                          <th className="px-4 py-3 text-left text-text font-semibold text-sm">
+                            Weight/Unit
+                          </th>
+                          <th className="px-4 py-3 text-left text-text font-semibold text-sm">
+                            Cost/Unit
+                          </th>
+                          <th className="px-4 py-3 text-left text-text font-semibold text-sm">
+                            Packaging
+                          </th>
+                          <th className="px-4 py-3 text-left text-text font-semibold text-sm">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary/5">
+                        {selectedItems[currentItem?.id]?.map(
+                          (detail, index) => (
+                            <motion.tr
+                              key={detail.id || index}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ delay: index * 0.1 }}
+                              className="hover:bg-primary/5 transition-colors"
+                            >
+                              <td className="px-4 py-3 text-text font-medium">
+                                {detail.quantity}
+                              </td>
+                              <td className="px-4 py-3 text-text">
+                                {detail.weightPerUnit} kg
+                              </td>
+                              <td className="px-4 py-3 text-text">
+                                ${detail.commodityPerUnitCost}
+                              </td>
+                              <td className="px-4 py-3 text-text">
+                                {detail.packaging?.name || "N/A"}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <motion.button
+                                    onClick={() => handleEditDetail(index)}
+                                    className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all duration-200"
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    title="Edit"
+                                  >
+                                    <FaEdit className="text-sm" />
+                                  </motion.button>
+                                  <motion.button
+                                    onClick={() =>
+                                      handleDeleteDetail(detail.id)
+                                    }
+                                    className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all duration-200"
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    title="Delete"
+                                  >
+                                    <FaTrash className="text-sm" />
+                                  </motion.button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end mt-4 pt-4 border-t dark:border-gray-700">
+              {/* Modal Footer */}
+              <div className="flex justify-end p-6 border-t border-primary/10">
                 <button
                   onClick={() => setShowDetailsView(false)}
-                  className="bg-gray-300 dark:bg-gray-700 text-black dark:text-white px-4 py-2 rounded-md"
+                  className="px-6 py-2 bg-text/10 text-text hover:bg-text/20 rounded-lg transition-all duration-200 font-medium"
                 >
                   Close
                 </button>
@@ -554,155 +773,202 @@ export default function ItemSelectionPage() {
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Detail Input Modal */}
+      {/* Detail Input Modal */}
+      <AnimatePresence>
         {showDetailInput && (
           <motion.div
-            className="fixed inset-0 h-full bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="bg-white dark:bg-gray-800 w-full md:w-2/5 p-6 rounded-lg shadow-lg flex flex-col max-h-[90vh]"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
+              className="bg-background border-2 border-primary/20 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.3 }}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">
-                  {currentDetailIndex !== null ? "Edit" : "Add"} Detail for{" "}
-                  {currentItem?.name}
-                </h3>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-primary/10">
+                <div>
+                  <h3 className="text-xl font-poppins font-semibold text-text">
+                    {currentDetailIndex !== null ? "Edit" : "Add"} Details
+                  </h3>
+                  <p className="text-text/60 text-sm mt-1">
+                    {currentItem?.name}
+                  </p>
+                </div>
                 <button
                   onClick={handleCancel}
-                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  className="w-8 h-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all duration-200"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto pr-2">
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-200">
-                  <p className="font-medium">✏️ Flexible Data Entry</p>
-                  <p>Fill in what you have now; update the remaining later!</p>
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Info Banner */}
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-primary text-sm">💡</span>
+                    </div>
+                    <div>
+                      <p className="text-text font-medium text-sm">
+                        Flexible Data Entry
+                      </p>
+                      <p className="text-text/60 text-xs mt-1">
+                        Fill in what you have now; update remaining details
+                        later!
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <Input
-                  type="number"
-                  value={itemDetail.qty}
-                  onChange={(e) =>
-                    setItemDetail((prev) => ({ ...prev, qty: e.target.value }))
-                  }
-                  placeholder="Quantity"
-                />
-                <Input
-                  classes="mt-5"
-                  type="number"
-                  value={itemDetail.weightPerUnit}
-                  onChange={(e) =>
-                    setItemDetail((prev) => ({
-                      ...prev,
-                      weightPerUnit: e.target.value,
-                    }))
-                  }
-                  placeholder="Weight Per Unit"
-                />
-                <Input
-                  classes="mt-5"
-                  type="number"
-                  value={itemDetail.commodityPerUnitCost}
-                  onChange={(e) =>
-                    setItemDetail((prev) => ({
-                      ...prev,
-                      commodityPerUnitCost: e.target.value,
-                    }))
-                  }
-                  placeholder="Per Unit Cost"
-                />
-                <Input
-                  classes="mt-5"
-                  type="number"
-                  value={itemDetail.packagingPerUnitCost}
-                  onChange={(e) =>
-                    setItemDetail((prev) => ({
-                      ...prev,
-                      packagingPerUnitCost: e.target.value,
-                    }))
-                  }
-                  placeholder="Packaging Per Unit Cost"
-                />
 
-                {/* Packaging Dropdown */}
-                <div className="mt-5">
-                  <select
-                    value={itemDetail.packaging?.id || ""}
-                    onChange={(e) => {
-                      if (e.target.value === "add-new-packaging") {
-                        router.push("/consignment/packaging/add-packaging");
+                {/* Form Fields */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+                      <FaBox className="text-primary/60" />
+                      Quantity
+                    </label>
+                    <Input
+                      type="number"
+                      value={itemDetail.qty}
+                      onChange={(e) =>
+                        setItemDetail((prev) => ({
+                          ...prev,
+                          qty: e.target.value,
+                        }))
                       }
-                      const selectedPackaging = packagingOptions.find(
-                        (pkg) => pkg.id === parseInt(e.target.value)
-                      );
-                      setItemDetail((prev) => ({
-                        ...prev,
-                        packaging: selectedPackaging,
-                      }));
-                    }}
-                    className="w-full p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 outline-none"
-                  >
-                    <option value="">Select Packaging</option>
-                    {packagingOptions.map((pkg) => (
-                      <option key={pkg.id} value={pkg.id}>
-                        {pkg.name} {pkg.packagingWeightPerUnit}
-                      </option>
-                    ))}
-                    <option
-                      value="add-new-packaging"
-                      className="text-green-600 capitalize font-semibold cursor-pointer"
+                      placeholder="Enter quantity"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+                      <FaWeight className="text-primary/60" />
+                      Weight Per Unit (kg)
+                    </label>
+                    <Input
+                      type="number"
+                      value={itemDetail.weightPerUnit}
+                      onChange={(e) =>
+                        setItemDetail((prev) => ({
+                          ...prev,
+                          weightPerUnit: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter weight per unit"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+                      <FaMoneyBill className="text-primary/60" />
+                      Cost Per Unit
+                    </label>
+                    <Input
+                      type="number"
+                      value={itemDetail.commodityPerUnitCost}
+                      onChange={(e) =>
+                        setItemDetail((prev) => ({
+                          ...prev,
+                          commodityPerUnitCost: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter cost per unit"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+                      <FaTag className="text-primary/60" />
+                      Packaging Cost
+                    </label>
+                    <Input
+                      type="number"
+                      value={itemDetail.packagingPerUnitCost}
+                      onChange={(e) =>
+                        setItemDetail((prev) => ({
+                          ...prev,
+                          packagingPerUnitCost: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter packaging cost"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+                      <FaBox className="text-primary/60" />
+                      Packaging Type
+                    </label>
+                    <select
+                      value={itemDetail.packaging?.id || ""}
+                      onChange={(e) => {
+                        if (e.target.value === "add-new-packaging") {
+                          router.push("/consignment/packaging/add-packaging");
+                          return;
+                        }
+                        const selectedPackaging = packagingOptions.find(
+                          (pkg) => pkg.id === parseInt(e.target.value)
+                        );
+                        setItemDetail((prev) => ({
+                          ...prev,
+                          packaging: selectedPackaging,
+                        }));
+                      }}
+                      className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
                     >
-                      + Add New Packaging
-                    </option>
-                  </select>
+                      <option value="">Select Packaging</option>
+                      {packagingOptions.map((pkg) => (
+                        <option key={pkg.id} value={pkg.id}>
+                          {pkg.name} ({pkg.packagingWeightPerUnit}kg)
+                        </option>
+                      ))}
+                      <option
+                        value="add-new-packaging"
+                        className="text-primary font-semibold bg-primary/5"
+                      >
+                        + Add New Packaging
+                      </option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 mt-4 pt-4 border-t dark:border-gray-700">
+              {/* Modal Footer */}
+              <div className="flex justify-end space-x-3 p-6 border-t border-primary/10">
                 <button
                   onClick={handleCancel}
-                  className="bg-CancelButton hover:bg-CancelButtonHover text-white px-4 py-2 rounded-md"
+                  className="px-6 py-3 bg-text/10 text-text hover:bg-text/20 rounded-xl transition-all duration-200 font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleItemDetail}
-                  className="bg-PrimaryButton hover:bg-PrimaryButtonHover transition text-white px-4 py-2 rounded-md"
+                  className="px-6 py-3 bg-primary text-white hover:bg-accent rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                   disabled={submitLoading}
                 >
-                  {submitLoading ? "Saving..." : "Save"}
+                  {submitLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </div>
+                  ) : (
+                    "Save Details"
+                  )}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
-
-        <div className="flex justify-between capitalize">
-          {!isLoading && (
-            <Link
-              className="bg-SecondaryButton hover:bg-SecondaryButtonHover transition-all duration-150 text-white px-4 py-2 rounded-md"
-              href={"/consignment/commodity/add-commodity"}
-            >
-              Add New Item
-            </Link>
-          )}
-          <div className="flex gap-4">
-            <motion.button
-              onClick={handleSave}
-              className="bg-PrimaryButton flex items-center gap-2 hover:bg-PrimaryButtonHover transition-all text-white px-4 sm:px-6 py-2 rounded-md"
-            >
-              Continue <FaArrowRight />
-            </motion.button>
-          </div>
-        </div>
-      </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -6,71 +6,101 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axiosInstance from "@utils/axiosConfig";
 import { useRouter } from "next/navigation";
 import React from "react";
-import { MdEdit } from "react-icons/md";
+import { MdEdit, MdAdd } from "react-icons/md";
 import Swal from "sweetalert2";
+import { motion } from "framer-motion";
+
 const ViewCommodity = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
+
   const { isLoading, data } = useQuery({
     queryKey: ["commodities"],
     queryFn: fetchCommodity,
   });
+
   const handleDelete = async (id) => {
     try {
       const result = await Swal.fire({
-        title: "Are you sure?",
-        text: "Do you really want to delete this commodity? This action cannot be undone.",
+        title: "Delete Commodity?",
+        text: "This action cannot be undone. All associated data will be removed.",
         icon: "warning",
         showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
+        confirmButtonColor: "rgb(var(--color-accent))",
+        cancelButtonColor: "rgb(var(--color-primary))",
         confirmButtonText: "Yes, delete it!",
+        cancelButtonText: "Cancel",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
       });
 
       if (result.isConfirmed) {
-        const response = await axiosInstance.delete(`/commodity/${id}`);
-        if (response.status === 200) {
-          Swal.fire({
-            position: "top-center",
-            icon: "success",
-            title: "Deleted Successfully",
-            showConfirmButton: false,
-            timer: 1500,
-          });
+        await axiosInstance.delete(`/commodity/${id}`);
 
-          queryClient.invalidateQueries(["commodities"]);
-        } else {
-          throw new Error("Unexpected response status: " + response.status);
-        }
+        Swal.fire({
+          position: "top-center",
+          icon: "success",
+          title: "Deleted Successfully!",
+          text: "Commodity has been removed from the system.",
+          showConfirmButton: false,
+          timer: 2000,
+          background: "rgb(var(--color-background))",
+          color: "rgb(var(--color-text))",
+          iconColor: "rgb(var(--color-primary))",
+        });
+
+        queryClient.invalidateQueries(["commodities"]);
       }
     } catch (error) {
-      Swal.fire("Error!", error.message, "error");
+      Swal.fire({
+        title: "Error!",
+        text: error.message || "Failed to delete commodity",
+        icon: "error",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
+      });
     }
   };
+
   const handleEdit = async (id) => {
     router.push(`/consignment/commodity/add-commodity?id=${id}`);
   };
 
-  const headers = ["s.no", "number", "name", "edit/delete"];
+  const headers = [
+    { key: "sno", label: "#" },
+    { key: "number", label: "Commodity Number", accessor: "number" },
+    { key: "name", label: "Commodity Name", accessor: "name" },
+    { key: "actions", label: "Actions" },
+  ];
+
   return (
-    <>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-6"
+    >
       <ReusableTable
-        title="Commodity"
+        title="Commodities"
         headers={headers}
         data={data}
         isLoading={isLoading}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        noDataMessage="No commodities found. Add your first commodity to get started."
         addButton={
-          <LinkButton
-            title="Add Commodity"
-            href="/consignment/commodity/add-commodity"
-            icon={MdEdit}
-            desc="Click to add new commodity"
-          />
+          <div className="text-center">
+            <LinkButton
+              title="Add New Commodity"
+              href="/consignment/commodity/add-commodity"
+              icon={MdAdd}
+              desc="Click to add a new commodity to your inventory"
+            />
+          </div>
         }
       />
-    </>
+    </motion.div>
   );
 };
 

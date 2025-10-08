@@ -7,6 +7,16 @@ export async function GET(_, { params }) {
   id = Number(id);
   const transactions = await prisma.transaction.findMany({
     where: { vendorId: id },
+    include: {
+      consignment: {
+        // Include consignment details
+        select: {
+          id: true,
+          date: true,
+          status: true,
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
   const vendor = await prisma.vendor.findUnique({

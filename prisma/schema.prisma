@@ -54,7 +54,7 @@ model Vendor {
   address   String
   country   String
   station   String
-  balance   Float
+  balance   Float?
   currency  String
   createdAt DateTime @default(now())
 
@@ -66,8 +66,8 @@ model Vendor {
 }
 
 model Transaction {
-  id            Int      @id @default(autoincrement())
-  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  id            Int          @id @default(autoincrement())
+  vendor        Vendor       @relation(fields: [vendorId], references: [id])
   vendorId      Int
   voucherId     String
   transactionId String
@@ -76,9 +76,12 @@ model Transaction {
   details       String?
   createdBy     Int? // user who created this
   balanceAfter  Float // vendor balance immediately after this txn
-  createdAt     DateTime @default(now())
+  consignmentId Int?
+  consignment   Consignment? @relation(fields: [consignmentId], references: [id])
+  createdAt     DateTime     @default(now())
 
   @@index([vendorId])
+  @@index([consignmentId])
 }
 
 model Packer {
@@ -93,6 +96,7 @@ model Consignee {
   id        Int      @id @default(autoincrement())
   vendorId  Int
   vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  balance   Float?
   createdAt DateTime @default(now())
 
   consignments        Consignment[]
@@ -127,23 +131,23 @@ model Packaging {
 }
 
 model GoodsDeclaration {
-  id                      Int      @id @default(autoincrement())
+  id                      Int       @id @default(autoincrement())
   number                  String
   date                    DateTime
   exchangeRate            Float
   commercialInvoiceNumber String
   fob                     Float
   gdFreight               Float
-  r1                      Float
-  dateR1                  DateTime
-  r2                      Float
-  dateR2                  DateTime
-  r3                      Float
-  dateR3                  DateTime
-  r4                      Float
-  dateR4                  DateTime
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  r1                      Float?
+  dateR1                  DateTime?
+  r2                      Float?
+  dateR2                  DateTime?
+  r3                      Float?
+  dateR3                  DateTime?
+  r4                      Float?
+  dateR4                  DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   consignments Consignment[]
   Utilization  FinancialInstrumentUtilization[]
@@ -153,6 +157,7 @@ model Packing {
   id        Int      @id @default(autoincrement())
   packerId  Int
   ratePerKg Float
+  totalCost Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -190,6 +195,7 @@ model CustomClearance {
   id            Int      @id @default(autoincrement())
   customAgentId Int
   fee           Float
+  totalCost     Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -273,5 +279,6 @@ model Consignment {
   packing          Packing?          @relation(fields: [packingId], references: [id])
   recoveryDone     RecoveryDone?     @relation(fields: [recoveryDoneId], references: [id])
 
-  goods ConsignmentItem[]
+  goods       ConsignmentItem[]
+  Transaction Transaction[]
 }

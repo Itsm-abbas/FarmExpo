@@ -1,10 +1,10 @@
+// app/api/customclearance/route.js
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
 
 export async function POST(req) {
   try {
     const { ca, fee } = await req.json();
-    // console.log("Request body:", await req.json());
 
     const clearance = await prisma.customClearance.create({
       data: {

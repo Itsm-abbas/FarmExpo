@@ -1,10 +1,11 @@
+// app/api/packing/route.js
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
 
 export async function POST(req) {
   try {
-    const { packer, ratePerKg } = await req.json();
-
+    const { packer, ratePerKg, totalCost } = await req.json();
+    console.log("Received data:", { packer, ratePerKg, totalCost });
     if (!packer?.id || !ratePerKg) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -16,6 +17,7 @@ export async function POST(req) {
       data: {
         packerId: packer.id,
         ratePerKg: parseFloat(ratePerKg),
+        totalCost: totalCost ? parseFloat(totalCost) : null,
       },
       include: { packer: true },
     });

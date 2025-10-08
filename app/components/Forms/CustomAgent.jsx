@@ -1,18 +1,29 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import SaveButton from "@components/Button/SaveButton";
 import Input from "@components/Input";
 import LinkButton from "@components/Button/LinkButton";
-import { FaEye } from "react-icons/fa";
+import {
+  FaEye,
+  FaUserTie,
+  FaMapMarkerAlt,
+  FaGlobe,
+  FaDollarSign,
+  FaIdCard,
+} from "react-icons/fa";
 import axiosInstance from "@utils/axiosConfig";
 import { getCookie } from "cookies-next";
+import { motion } from "framer-motion";
+
 export default function CustomAgent() {
   const token = getCookie("token");
   const searchParams = useSearchParams();
-  const id = searchParams.get("id"); // Extract the ID from query params
+  const id = searchParams.get("id");
+  const router = useRouter();
+
   const [formData, setFormData] = useState({
     name: "",
     ntn: "",
@@ -23,11 +34,12 @@ export default function CustomAgent() {
     currency: "",
   });
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (id) {
-      // Fetch the existing customagent data
       const fetchCustomAgents = async () => {
+        setLoading(true);
         try {
           const response = await axiosInstance.get(`/custom-agent/${id}`);
           const { data } = response;
@@ -36,8 +48,13 @@ export default function CustomAgent() {
           Swal.fire({
             icon: "error",
             title: "Error",
-            text: "Failed to fetch customagent details.",
+            text: "Failed to fetch custom agent details.",
+            background: "rgb(var(--color-background))",
+            color: "rgb(var(--color-text))",
+            confirmButtonColor: "rgb(var(--color-primary))",
           });
+        } finally {
+          setLoading(false);
         }
       };
       fetchCustomAgents();
@@ -45,24 +62,31 @@ export default function CustomAgent() {
   }, [id]);
 
   const handleSubmit = async () => {
-    if (
-      !formData.name ||
-      !formData.station ||
-      !formData.ntn ||
-      !formData.address ||
-      !formData.country ||
-      !formData.balance ||
-      !formData.currency
-    ) {
+    const requiredFields = [
+      "name",
+      "station",
+      "ntn",
+      "address",
+      "country",
+      "currency",
+    ];
+    const missingFields = requiredFields.filter(
+      (field) => !formData[field]?.trim()
+    );
+
+    if (missingFields.length > 0) {
       Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Please fill in all the fields.",
+        icon: "warning",
+        title: "Missing Information",
+        text: "Please fill in all required fields.",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
       });
       return;
     }
 
-    setLoading(true);
+    setIsSubmitting(true);
     try {
       const method = id ? "PUT" : "POST";
       const url = id ? `/api/custom-agent/${id}` : `/api/custom-agent`;
@@ -73,144 +97,286 @@ export default function CustomAgent() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          name: formData.name.trim(),
+          ntn: formData.ntn.trim(),
+          address: formData.address.trim(),
+          country: formData.country.trim(),
+          station: formData.station.trim(),
+          currency: formData.currency.trim(),
+        }),
       });
 
       if (!response.ok) {
         throw new Error("Failed to save data");
       }
 
-      if (response.ok) {
-        Swal.fire({
-          position: "top-center",
-          icon: "success",
-          title: id ? "Updated successfully." : "Added successfully.",
-          showConfirmButton: false,
-          timer: 1500,
+      Swal.fire({
+        position: "top-center",
+        icon: "success",
+        title: id ? "Updated successfully!" : "Added successfully!",
+        text: id
+          ? "Custom agent details have been updated."
+          : "New custom agent has been added.",
+        showConfirmButton: false,
+        timer: 2000,
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        iconColor: "rgb(var(--color-primary))",
+      });
+
+      if (!id) {
+        setFormData({
+          name: "",
+          ntn: "",
+          address: "",
+          country: "",
+          station: "",
+          balance: 0,
+          currency: "",
         });
-        if (!id) {
-          setFormData({
-            name: "",
-            ntn: "",
-            address: "",
-            country: "",
-            station: "",
-            balance: 0,
-            currency: "",
-          });
-        } // Clear form for new entry
+        // Redirect after successful creation
+        setTimeout(() => {
+          router.push("/consignment/custom-agent/view-customAgent");
+        }, 1000);
       }
     } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "An error occurred while saving data.",
+        text: error.message || "An error occurred while saving data.",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  return (
-    <div className="space-y-4 text-LightPText dark:text-DarkPText w-full md:w-4/5 lg:w-1/2">
-      <div className=" shadow-md rounded-md p-6 space-y-4 border-LightBorder dark:border-DarkBorder border-2">
-        <h2 className="text-xl font-semibold mb-8">Custom Agent</h2>
-        <div>
-          <Input
-            id="name"
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Enter name"
-            label="Name*"
-          />
-        </div>{" "}
-        <div>
-          <Input
-            id="ntn"
-            type="text"
-            value={formData.ntn}
-            onChange={(e) => setFormData({ ...formData, ntn: e.target.value })}
-            placeholder="Enter ntn"
-            label="Ntn*"
-          />
-        </div>
-        <div>
-          <Input
-            id="address"
-            type="text"
-            value={formData.address}
-            onChange={(e) =>
-              setFormData({ ...formData, address: e.target.value })
-            }
-            placeholder="Enter address"
-            label="Address*"
-          />
-        </div>
-        <div>
-          <Input
-            id="country"
-            type="text"
-            value={formData.country}
-            onChange={(e) =>
-              setFormData({ ...formData, country: e.target.value })
-            }
-            placeholder="Enter country"
-            label="Country*"
-          />
-        </div>{" "}
-        <div>
-          <Input
-            id="station"
-            type="text"
-            value={formData.station}
-            onChange={(e) =>
-              setFormData({ ...formData, station: e.target.value })
-            }
-            placeholder="Enter station"
-            label="Station*"
-          />
-        </div>
-        <div>
-          <Input
-            id="balance"
-            type="float"
-            min="0"
-            value={formData.balance}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                balance: parseFloat(e.target.value) || 0,
-              })
-            }
-            placeholder="Enter balance"
-            label="Balance*"
-          />
-        </div>
-        <div>
-          <Input
-            id="currency"
-            type="text"
-            value={formData.currency}
-            onChange={(e) =>
-              setFormData({ ...formData, currency: e.target.value })
-            }
-            placeholder="Enter currency"
-            label="Currency*"
-          />
-        </div>
-        <SaveButton
-          handleSubmit={handleSubmit}
-          isLoading={loading}
-          existingData={id ? true : false}
-        />
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.4,
+        ease: "easeOut",
+      },
+    },
+  };
+
+  if (loading && id) {
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <motion.div
+          className="flex items-center space-x-3 text-primary"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="font-inter text-text">
+            Loading custom agent details...
+          </span>
+        </motion.div>
       </div>
-      <LinkButton
-        href="/consignment/customagent/view-customAgent"
-        title="See your custom agents"
-        icon={FaEye}
-        desc="Click to view your existing custom agents"
-      />
-    </div>
+    );
+  }
+
+  return (
+    <motion.div
+      className="space-y-6 w-full max-w-4xl mx-auto"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* Form Section */}
+      <motion.div
+        className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
+        variants={itemVariants}
+      >
+        <div className="p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Basic Information */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-text font-poppins flex items-center space-x-2">
+                <FaUserTie className="text-primary text-sm" />
+                <span>Agent Information</span>
+              </h3>
+
+              <Input
+                id="name"
+                type="text"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                placeholder="Enter agent name"
+                label="Full Name"
+                disabled={isSubmitting}
+                required
+              />
+
+              <Input
+                id="ntn"
+                type="text"
+                value={formData.ntn}
+                onChange={(e) =>
+                  setFormData({ ...formData, ntn: e.target.value })
+                }
+                placeholder="Enter NTN number"
+                label="NTN Number"
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+
+            {/* Location Information */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-text font-poppins flex items-center space-x-2">
+                <FaMapMarkerAlt className="text-primary text-sm" />
+                <span>Location Details</span>
+              </h3>
+
+              <Input
+                id="address"
+                type="text"
+                value={formData.address}
+                onChange={(e) =>
+                  setFormData({ ...formData, address: e.target.value })
+                }
+                placeholder="Enter complete address"
+                label="Address"
+                disabled={isSubmitting}
+                required
+              />
+
+              <Input
+                id="station"
+                type="text"
+                value={formData.station}
+                onChange={(e) =>
+                  setFormData({ ...formData, station: e.target.value })
+                }
+                placeholder="Enter operating station"
+                label="Station"
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+
+            {/* Regional Information */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-text font-poppins flex items-center space-x-2">
+                <FaGlobe className="text-primary text-sm" />
+                <span>Regional Information</span>
+              </h3>
+
+              <Input
+                id="country"
+                type="text"
+                value={formData.country}
+                onChange={(e) =>
+                  setFormData({ ...formData, country: e.target.value })
+                }
+                placeholder="Enter country"
+                label="Country"
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+
+            {/* Financial Information */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-text font-poppins flex items-center space-x-2">
+                <FaDollarSign className="text-primary text-sm" />
+                <span>Financial Details</span>
+              </h3>
+
+              <Input
+                id="balance"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.balance}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    balance: parseFloat(e.target.value) || 0,
+                  })
+                }
+                placeholder="Enter initial balance"
+                label="Initial Balance"
+                disabled={isSubmitting}
+              />
+
+              <Input
+                id="currency"
+                type="text"
+                value={formData.currency}
+                onChange={(e) =>
+                  setFormData({ ...formData, currency: e.target.value })
+                }
+                placeholder="e.g., USD, EUR, PKR"
+                label="Currency"
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <motion.div
+            className="mt-8 pt-6 border-t border-primary/10"
+            variants={itemVariants}
+          >
+            <SaveButton
+              handleSubmit={handleSubmit}
+              isLoading={isSubmitting}
+              existingData={!!id}
+            />
+          </motion.div>
+        </div>
+      </motion.div>
+
+      {/* Quick Action Section */}
+      <motion.div variants={itemVariants} className="text-center">
+        <LinkButton
+          href="/consignment/custom-agent/view-customAgent"
+          title="View All Custom Agents"
+          icon={FaEye}
+          desc="Browse and manage your existing custom agents"
+        />
+      </motion.div>
+
+      {/* Form Guidelines */}
+      <motion.div
+        className="bg-primary/5 rounded-xl p-6 border border-primary/10"
+        variants={itemVariants}
+      >
+        <h3 className="font-semibold font-poppins text-text mb-3 flex items-center space-x-2">
+          <FaIdCard className="text-primary" />
+          <span>Custom Agent Guidelines</span>
+        </h3>
+        <ul className="text-sm font-inter text-text/70 space-y-2">
+          <li>• Fields marked with * are required for compliance</li>
+          <li>• Ensure NTN number is accurate for legal purposes</li>
+          <li>• Provide complete address for official correspondence</li>
+          <li>• Set initial balance to reflect current financial standing</li>
+          <li>• Specify currency for international transactions</li>
+        </ul>
+      </motion.div>
+    </motion.div>
   );
 }

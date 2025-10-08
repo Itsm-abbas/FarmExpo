@@ -5,10 +5,20 @@ import { useParams } from "next/navigation";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import moment from "moment";
-import fonts from "@utils/fonts";
-// import * as XLSX from "xlsx";
-import axiosInstance from "@utils/axiosConfig";
 import XLSX from "xlsx-js-style";
+import axiosInstance from "@utils/axiosConfig";
+import {
+  FaFileExcel,
+  FaFilePdf,
+  FaPrint,
+  FaDownload,
+  FaCalculator,
+  FaWeight,
+  FaMoneyBillWave,
+  FaBox,
+  FaShippingFast,
+  FaFileInvoice,
+} from "react-icons/fa";
 
 const Invoice = () => {
   const params = useParams();
@@ -44,17 +54,20 @@ const Invoice = () => {
     setNetWeight(totalNetWeight);
     setTareWeight(totalTareWeight);
     setGrossWeight(totalNetWeight + totalTareWeight);
+
     //CFR
     const totalcfr =
       consignment?.goodsDeclaration?.fob +
       consignment?.goodsDeclaration?.gdFreight;
     setCFR(totalcfr);
+
     // Total AirwayBill
     const totalA =
       consignment?.airwayBill?.rate *
         consignment?.airwayBill?.airwayBillWeight +
       consignment?.airwayBill?.fee;
     setTotalAirwayBill(totalA);
+
     // Total Packing Rate
     const totalPackging =
       consignment?.airwayBill?.airwayBillWeight *
@@ -69,22 +82,26 @@ const Invoice = () => {
     }, 0);
 
     setTotalGoodAmount(parseInt(totalG));
+
     // Daily Expenses
     setDailyExpenses(consignment?.dailyExpenses);
+
     // Total Recovery
     const totalRecovery =
       consignment?.recoveryDone?.amount *
       consignment?.recoveryDone?.exchangeRate;
     setTotalRecovery(totalRecovery);
+
     // Total Packaging Cost
     const totalPackaging = consignment?.goods.reduce((acc, good) => {
       const totalAmount = good.quantity * good.packagingPerUnitCost;
       return acc + totalAmount;
     }, 0);
     setTotalPackagingCost(totalPackaging);
+
     // Custom Fee
     setCustomFee(consignment?.customClearance?.fee);
-  }, [consignment]); // Runs only when `consignment` changes
+  }, [consignment]);
 
   // Fetch consignment and FIU data
   useEffect(() => {
@@ -96,7 +113,6 @@ const Invoice = () => {
         ]);
 
         setConsignment(consignmentRes.data);
-        // Filter FIU data for this consignment's goods declaration
         if (consignmentRes.data?.goodsDeclarationId) {
           const filteredFiu = fiuRes.data.filter(
             (fiu) =>
@@ -147,7 +163,7 @@ const Invoice = () => {
       totalPackingAmount +
       dailyExpenses +
       customFee);
-  // To excel
+
   const exportToExcel = () => {
     if (!consignment) return;
 
@@ -760,581 +776,667 @@ const Invoice = () => {
     }
   };
 
-  // Trigger print dialog
   const handlePrint = () => {
     window.print();
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex flex-col items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full"
+          className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full mb-4"
         ></motion.div>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-gray-600 dark:text-gray-300 text-lg"
+        >
+          Loading Invoice Data...
+        </motion.p>
       </div>
     );
   }
 
   if (!consignment) {
     return (
-      <div
-        className={` text-center text-red-500 mt-10 bg-gray-100 dark:bg-gray-900 dark:text-red-400`}
-      >
-        Failed to load invoice data.
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 text-center max-w-md"
+        >
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FaFileInvoice className="text-2xl text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
+            Invoice Not Found
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300">
+            Failed to load invoice data for this consignment.
+          </p>
+        </motion.div>
       </div>
     );
   }
 
+  const totalCost =
+    totalAirwayBill +
+    totalPackagingCost +
+    totalGoodsAmount +
+    totalPackingAmount +
+    dailyExpenses +
+    customFee;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className={`p-4 bg-gray-100 dark:bg-gray-900 min-h-screen ${fonts.openSans.className}`}
+      className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4"
     >
-      <div
-        id="invoice"
-        className="print-area bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 max-w-4xl mx-auto text-sm"
+      {/* Header Section */}
+      <motion.div
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="max-w-7xl mx-auto mb-8"
       >
-        {/* Header */}
-        <div className="text-center mb-6 border-b pb-4 border-gray-200 dark:border-gray-700">
-          <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-            FarmExpo - Invoice
-          </h1>
-          <div className="flex justify-center gap-4 text-gray-600 dark:text-gray-300">
-            <p>
-              <span className="font-semibold">Consignment ID:</span>
-              {consignment?.id}
-            </p>
-            <p>
-              <span className="font-semibold">Date:</span>
-              {new Date(consignment?.date).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        {/* Trader & Consignee Table */}
-        <table className="table w-full mb-6 border border-gray-200 dark:border-gray-700 ">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="p-3 text-left border-b w-1/2 border-gray-200 dark:border-gray-700">
-                Trader Details
-              </th>
-              <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                Consignee Details
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="p-3 border-r border-gray-200 dark:border-gray-700 ">
-                <p className="mb-1">
-                  <span className="font-semibold">Name:</span>
-                  {consignment?.trader?.name}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-500 rounded-xl">
+                <FaFileInvoice className="text-2xl text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 dark:text-white">
+                  FarmExpo Invoice
+                </h1>
+                <p className="text-gray-600 dark:text-gray-300">
+                  Consignment #{consignmentId}
                 </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Address:</span>
-                  {consignment?.trader?.address}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Country:</span>
-                  {consignment?.trader?.country}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">NTN:</span>
-                  {consignment?.trader?.ntn}
-                </p>
-              </td>
-              <td className="p-3">
-                <p className="mb-1">
-                  <span className="font-semibold">Name:</span>
-                  {consignment?.consignee?.vendor.name}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Address:</span>
-                  {consignment?.consignee?.vendor.address}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Country:</span>
-                  {consignment?.consignee?.vendor.country}
-                </p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        {/* Airway Bill & Goods Declaration Table */}
-        <table className="table w-full mb-6 border border-gray-200 dark:border-gray-700">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="p-3  w-1/2 text-left border-b border-gray-200 dark:border-gray-700">
-                Airway/Seaway Bill
-              </th>
-              <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                Goods Declaration
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="p-3 border-r border-gray-200 dark:border-gray-700 ">
-                <p className="mb-1">
-                  <span className="font-semibold">Number:</span>
-                  {consignment?.airwayBill?.number}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Agent:</span>
-                  {consignment?.airwayBill?.iataAgent?.vendor.name}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Station:</span>
-                  {consignment?.airwayBill?.iataAgent?.vendor.station}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Date:</span>
-                  {new Date(
-                    consignment?.airwayBill?.dateTime
-                  )?.toLocaleString()}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Rate:</span>
-                  {consignment?.airwayBill?.rate?.toLocaleString()}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Weight:</span>
-                  {consignment?.airwayBill?.airwayBillWeight?.toLocaleString()}{" "}
-                  kg
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Fee:</span>
-                  {consignment?.airwayBill?.fee?.toLocaleString()}
-                </p>
-                <p className="mt-3  p-1 bg-gray-200 dark:bg-gray-600 font-semibold flex justify-between">
-                  <span>Total</span>
-                  {totalAirwayBill?.toLocaleString()}
-                </p>
-              </td>
-              <td className="p-3 flex flex-col">
-                <p className="mb-1">
-                  <span className="font-semibold">Number:</span>
-                  {consignment?.goodsDeclaration?.number}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Date:</span>
-                  {new Date(
-                    consignment?.goodsDeclaration?.date
-                  ).toLocaleDateString()}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Exchange Rate:</span>
-                  {consignment?.goodsDeclaration?.exchangeRate}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Invoice No:</span>
-                  {consignment?.goodsDeclaration?.commercialInvoiceNumber}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">FOB:</span>
-                  {consignment?.goodsDeclaration?.fob}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">GD Freight:</span>
-                  {consignment?.goodsDeclaration?.gdFreight}
-                </p>{" "}
-                <p className="mt-3 flex justify-between p-1 bg-gray-200 dark:bg-gray-600 dark:text-white font-semibold">
-                  <span>CFR</span>
-                  {CFR.toLocaleString()}
-                </p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        {/* Custom Clearance & Packing Table */}
-        <table className="table w-full mb-6 border border-gray-200 dark:border-gray-700">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="p-3 w-1/2 text-left border-b border-gray-200 dark:border-gray-700">
-                Custom Clearance
-              </th>
-              <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                Packing
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="p-3 border-r border-gray-200 dark:border-gray-700">
-                <p className="mb-1">
-                  <span className="font-semibold">Custom Agent Name:</span>
-                  {consignment?.customClearance?.customAgent?.vendor.name}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Custom Agent Station:</span>
-                  {consignment?.customClearance?.customAgent?.vendor.station}
-                </p>
-                <p className="mt-3  p-1 bg-gray-200 dark:bg-gray-600 font-semibold flex justify-between">
-                  <span>Fee</span>
-                  {consignment?.customClearance?.fee?.toLocaleString()}
-                </p>
-              </td>
-              <td className="p-3">
-                <p className="mb-1">
-                  <span className="font-semibold">Packer:</span>
-                  {consignment?.packing?.packer?.vendor.name}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Station:</span>
-                  {consignment?.packing?.packer?.vendor.station}
-                </p>
-                <p className="mb-1">
-                  <span className="font-semibold">Rate per Kg:</span>
-                  {consignment?.packing?.ratePerKg}
-                </p>
-                <p className="mt-3  p-1 bg-gray-200 dark:bg-gray-600 dark:text-white font-semibold flex justify-between">
-                  <span>Total</span>
-                  {totalPackingAmount}
-                </p>
-              </td>
-            </tr>
-          </tbody>
-          {/* Financial Instrument */}
-        </table>
-        {fiuData.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b pb-2 border-gray-200 dark:border-gray-700">
-              Financial Instrument Utilization
-            </h2>
-            <table className="table w-full border border-gray-200 dark:border-gray-700">
-              <thead>
-                <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                    Instrument
-                  </th>
-                  <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                    Amount
-                  </th>
-                  <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                    Utilized
-                  </th>
-                  <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                    Balance
-                  </th>
-                  <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                    Expiry
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {fiuData.map((fiu, index) => (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-200 dark:border-gray-700"
-                  >
-                    <td className="p-3">{fiu.financialInstrument?.number}</td>
-                    <td className="p-3">
-                      {fiu.financialInstrument?.amount?.toLocaleString()}{" "}
-                      {fiu.financialInstrument?.currency}
-                    </td>
-                    <td className="p-3">
-                      {fiu.utilized?.toLocaleString()}{" "}
-                      {fiu.financialInstrument?.currency}
-                    </td>
-                    <td className="p-3">
-                      {fiu.financialInstrument?.balance?.toLocaleString()}{" "}
-                      {fiu.financialInstrument?.currency}
-                    </td>
-                    <td className="p-3">
-                      {fiu.financialInstrument?.expiryDate.slice(0, 10)}
-                    </td>
-                  </tr>
-                ))}
-                {/* Total Row */}
-                <tr className="bg-gray-100 dark:bg-gray-600 dark:text-white font-semibold">
-                  <td className="p-2">TOTAL</td>
-                  <td className="p-2"></td>
-                  <td className="p-2">{totalutilize.toLocaleString()}</td>
-                  <td className="p-2"></td>
-                  <td className="p-2"></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-        {/* Packaging Table with Total Row */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b pb-2 border-gray-200 dark:border-gray-700">
-            Goods
-          </h2>
-          <table className="table w-full border border-gray-200 dark:border-gray-700">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-700">
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Item
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Qty
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Per Unit
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  ctn Weight
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  ctn tWeight
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Rate per Unit
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  tWeight
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Total Amount
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {consignment?.goods?.map((good, index) => {
-                const ctntWeight =
-                  (good.quantity || 0) *
-                  (good.packaging?.packagingWeightPerUnit || 0);
+              </div>
+            </div>
 
-                const totalWeight =
-                  (good.weightPerUnit || 0) * (good.quantity || 0);
-                const totalAmount =
-                  totalWeight * (good.commodityPerUnitCost || 0);
-
-                return (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-200 dark:border-gray-700"
-                  >
-                    <td className="p-2">{good?.commodityItem?.name}</td>
-                    <td className="p-2">{good?.quantity?.toLocaleString()}</td>
-                    <td className="p-2">
-                      {good?.weightPerUnit?.toFixed(1)?.toLocaleString()} kg
-                    </td>
-                    <td className="p-2">
-                      {good?.packaging?.packagingWeightPerUnit?.toLocaleString() ||
-                        0}
-                      kg
-                    </td>
-                    <td className="p-2">{ctntWeight?.toLocaleString()} kg</td>
-                    <td className="p-2">
-                      {good?.commodityPerUnitCost?.toLocaleString()}
-                    </td>
-                    <td className="p-2">{totalWeight?.toLocaleString()} kg</td>
-                    <td className="p-2 font-semibold ">
-                      {totalAmount?.toLocaleString()}
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* Total Row */}
-              <tr className="bg-gray-100 dark:bg-gray-600 dark:text-white font-semibold">
-                <td className="p-2">TOTAL</td>
-                <td className="p-2"></td>
-                <td className="p-2"></td>
-                <td className="p-2"></td>
-                <td className="p-2"></td>
-                <td className="p-2"></td>
-                <td className="p-2">{totalWeight?.toLocaleString()} kg</td>
-                <td className="p-2">{totalGoodsAmount?.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>{" "}
-        {/* Goods Table with Total Row */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b pb-2 border-gray-200 dark:border-gray-700">
-            Packaging
-          </h2>
-          <table className="table w-full border border-gray-200 dark:border-gray-700">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-700">
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Packing Material
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Quantity
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Price
-                </th>
-                <th className="p-2 text-left border-b border-gray-200 dark:border-gray-700">
-                  Total Amount
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {consignment?.goods?.map((good, index) => {
-                return (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-200 dark:border-gray-700"
-                  >
-                    <td className="p-2">{good?.packaging?.name}</td>
-                    <td className="p-2">{good?.quantity?.toLocaleString()}</td>
-                    <td className="p-2">
-                      {good?.packagingPerUnitCost?.toLocaleString()}
-                    </td>
-                    <td className="p-2">
-                      {(
-                        good?.packagingPerUnitCost * good?.quantity
-                      )?.toLocaleString() || 0}
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* Total Row */}
-              <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
-                <td className="p-2">TOTAL</td>
-                <td className="p-2"></td>
-                <td className="p-2"></td>
-                <td className="p-2">{totalPackagingCost?.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {/* Totals & Recovery */}
-        <table className="table w-full mb-6 border border-gray-200 dark:border-gray-700">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700 ">
-              <th className="p-3 text-left border-b w-1/2 border-gray-200 dark:border-gray-700">
-                Totals
-              </th>
-              <th className="p-3 text-left border-b border-gray-200 dark:border-gray-700">
-                Recovery
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="p-3 border-r border-gray-200 dark:border-gray-700 ">
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Net Weight</span>
-                  {netWeight?.toLocaleString()} kg
+            {/* Quick Stats */}
+            <div className="flex flex-wrap gap-3">
+              <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg">
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                  Status
                 </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Tare Weight</span>
-                  {tareWeight?.toLocaleString()} kg
+                <p
+                  className={`font-semibold ${
+                    consignment?.status === "Fulfilled"
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-orange-600 dark:text-orange-400"
+                  }`}
+                >
+                  {consignment?.status}
                 </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Gross Weight</span>
-                  {grossWeight?.toLocaleString()} kg
+              </div>
+              <div className="bg-green-50 dark:bg-green-900/20 px-4 py-2 rounded-lg">
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  Recovery
                 </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Daily Expenses</span>
-                  {consignment?.dailyExpenses?.toLocaleString()}
-                </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Status</span>
-                  <span
-                    className={`${
-                      consignment?.status == "Fulfilled"
-                        ? "text-green-500 p-1 "
-                        : "text-red-500 p-1 "
-                    }`}
-                  >
-                    {consignment?.status}
-                  </span>
-                </p>
-                <p className="mt-3  p-1 bg-gray-200 dark:bg-gray-600 dark:text-white font-semibold flex justify-between">
-                  <span>Total Cost</span>
-                  {(
-                    totalAirwayBill +
-                    totalPackagingCost +
-                    totalGoodsAmount +
-                    totalPackingAmount +
-                    dailyExpenses +
-                    customFee
-                  ).toLocaleString()}
-                </p>
-              </td>
-              <td className="p-3 flex flex-col">
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Amount:</span>
-                  {consignment?.recoveryDone?.amount}
-                </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Currency:</span>
-                  {consignment?.recoveryDone?.currency}
-                </p>
-                <p className="mb-1 border-b-2 flex justify-between">
-                  <span className="font-semibold">Exchange Rate:</span>
-                  {consignment?.recoveryDone?.exchangeRate}
-                </p>
-                <p className="mt-3 p-1 flex justify-between  bg-gray-200 dark:bg-gray-600 dark:text-white font-bold">
-                  <span>Total Recovery :</span>{" "}
+                <p className="font-semibold text-green-700 dark:text-green-300">
                   {totalRecovery?.toLocaleString()}
                 </p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <h1 className="w-full font-bold flex gap-4 justify-center items-center p-2 bg-gray-200 dark:bg-gray-600 dark:text-white">
-          <span>{grandTotal > 0 ? "Profit" : "Loss"} =</span>
-          <span>{Math.abs(grandTotal).toLocaleString()}</span>
-        </h1>
-        {/* <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-          Invoice generated on: {moment().format("MMMM Do YYYY, h:mm:ss a")}
-        </div> */}
-      </div>
+              </div>
+              <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-2 rounded-lg">
+                <p className="text-sm text-purple-600 dark:text-purple-400">
+                  Profit/Loss
+                </p>
+                <p
+                  className={`font-semibold ${
+                    grandTotal > 0
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {Math.abs(grandTotal)?.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
-      {/* Buttons */}
-      <div className="fixed bottom-6 right-6 flex gap-4 print:hidden">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={exportToExcel}
-          className="bg-[#217346] text-white px-4 py-2 rounded-lg shadow hover:bg-[#1A5A36] transition"
-        >
-          Export to Excel
-        </motion.button>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={generatePDF}
-          className="bg-SecondaryButton text-white px-4 py-2 rounded-lg shadow hover:bg-SecondaryButtonHover transition dark:bg-blue-500 dark:hover:bg-blue-600"
-        >
-          Download PDF
-        </motion.button>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handlePrint}
-          className="bg-[#4A4A4A] text-white px-4 py-2 rounded-lg shadow hover:bg-[#333333] transition"
-        >
-          Take Print
-        </motion.button>
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-4 gap-6">
+        {/* Main Invoice Content */}
+        <div className="lg:col-span-3">
+          <motion.div
+            id="invoice"
+            className="bg-white dark:bg-gray-800 shadow-2xl rounded-2xl p-6 lg:p-8 space-y-6"
+          >
+            {/* Header */}
+            <div className="text-center border-b-2 border-blue-200 dark:border-gray-600 pb-6">
+              <h1 className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+                FarmExpo - Commercial Invoice
+              </h1>
+              <div className="flex flex-wrap justify-center gap-6 text-gray-600 dark:text-gray-300">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Consignment ID:</span>
+                  <span className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
+                    #{consignment?.id}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Date:</span>
+                  <span>
+                    {new Date(consignment?.date).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Trader & Consignee */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-200 dark:border-gray-600">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaShippingFast className="text-blue-500" />
+                  Trader Details
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow label="Name" value={consignment?.trader?.name} />
+                  <InfoRow
+                    label="Address"
+                    value={consignment?.trader?.address}
+                  />
+                  <InfoRow
+                    label="Country"
+                    value={consignment?.trader?.country}
+                  />
+                  <InfoRow label="NTN" value={consignment?.trader?.ntn} />
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-200 dark:border-gray-600">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaShippingFast className="text-green-500" />
+                  Consignee Details
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Name"
+                    value={consignment?.consignee?.vendor.name}
+                  />
+                  <InfoRow
+                    label="Address"
+                    value={consignment?.consignee?.vendor.address}
+                  />
+                  <InfoRow
+                    label="Country"
+                    value={consignment?.consignee?.vendor.country}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Airway Bill & Goods Declaration */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaShippingFast className="text-blue-600" />
+                  Airway/Seaway Bill
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Number"
+                    value={consignment?.airwayBill?.number}
+                  />
+                  <InfoRow
+                    label="Agent"
+                    value={consignment?.airwayBill?.iataAgent?.vendor.name}
+                  />
+                  <InfoRow
+                    label="Station"
+                    value={consignment?.airwayBill?.iataAgent?.vendor.station}
+                  />
+                  <InfoRow
+                    label="Date"
+                    value={new Date(
+                      consignment?.airwayBill?.dateTime
+                    )?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Rate"
+                    value={consignment?.airwayBill?.rate?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Weight"
+                    value={`${consignment?.airwayBill?.airwayBillWeight?.toLocaleString()} kg`}
+                  />
+                  <InfoRow
+                    label="Fee"
+                    value={consignment?.airwayBill?.fee?.toLocaleString()}
+                  />
+                  <div className="border-t border-blue-200 dark:border-blue-700 pt-2 mt-2">
+                    <InfoRow
+                      label="Total"
+                      value={totalAirwayBill?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaFileInvoice className="text-green-600" />
+                  Goods Declaration
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Number"
+                    value={consignment?.goodsDeclaration?.number}
+                  />
+                  <InfoRow
+                    label="Date"
+                    value={new Date(
+                      consignment?.goodsDeclaration?.date
+                    ).toLocaleDateString()}
+                  />
+                  <InfoRow
+                    label="Exchange Rate"
+                    value={consignment?.goodsDeclaration?.exchangeRate}
+                  />
+                  <InfoRow
+                    label="Invoice No"
+                    value={
+                      consignment?.goodsDeclaration?.commercialInvoiceNumber
+                    }
+                  />
+                  <InfoRow
+                    label="FOB"
+                    value={consignment?.goodsDeclaration?.fob}
+                  />
+                  <InfoRow
+                    label="GD Freight"
+                    value={consignment?.goodsDeclaration?.gdFreight}
+                  />
+                  <div className="border-t border-green-200 dark:border-green-700 pt-2 mt-2">
+                    <InfoRow
+                      label="CFR"
+                      value={CFR?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Clearance & Packing */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaFileInvoice className="text-purple-600" />
+                  Custom Clearance
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Agent Name"
+                    value={
+                      consignment?.customClearance?.customAgent?.vendor.name
+                    }
+                  />
+                  <InfoRow
+                    label="Station"
+                    value={
+                      consignment?.customClearance?.customAgent?.vendor.station
+                    }
+                  />
+                  <div className="border-t border-purple-200 dark:border-purple-700 pt-2 mt-2">
+                    <InfoRow
+                      label="Fee"
+                      value={consignment?.customClearance?.fee?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-200 dark:border-orange-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaBox className="text-orange-600" />
+                  Packing
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Packer"
+                    value={consignment?.packing?.packer?.vendor.name}
+                  />
+                  <InfoRow
+                    label="Station"
+                    value={consignment?.packing?.packer?.vendor.station}
+                  />
+                  <InfoRow
+                    label="Rate per Kg"
+                    value={consignment?.packing?.ratePerKg}
+                  />
+                  <div className="border-t border-orange-200 dark:border-orange-700 pt-2 mt-2">
+                    <InfoRow
+                      label="Total"
+                      value={totalPackingAmount?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Instruments */}
+            {fiuData.length > 0 && (
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaMoneyBillWave className="text-indigo-600" />
+                  Financial Instrument Utilization
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-indigo-200 dark:border-indigo-700">
+                        <th className="text-left p-2 font-semibold">
+                          Instrument
+                        </th>
+                        <th className="text-left p-2 font-semibold">Amount</th>
+                        <th className="text-left p-2 font-semibold">
+                          Utilized
+                        </th>
+                        <th className="text-left p-2 font-semibold">Balance</th>
+                        <th className="text-left p-2 font-semibold">Expiry</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fiuData.map((fiu, index) => (
+                        <tr
+                          key={index}
+                          className="border-b border-indigo-100 dark:border-indigo-800"
+                        >
+                          <td className="p-2">
+                            {fiu.financialInstrument?.number}
+                          </td>
+                          <td className="p-2">
+                            {fiu.financialInstrument?.amount?.toLocaleString()}{" "}
+                            {fiu.financialInstrument?.currency}
+                          </td>
+                          <td className="p-2">
+                            {fiu.utilized?.toLocaleString()}{" "}
+                            {fiu.financialInstrument?.currency}
+                          </td>
+                          <td className="p-2">
+                            {fiu.financialInstrument?.balance?.toLocaleString()}{" "}
+                            {fiu.financialInstrument?.currency}
+                          </td>
+                          <td className="p-2">
+                            {fiu.financialInstrument?.expiryDate?.slice(0, 10)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Goods Section */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-200 dark:border-gray-600">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                <FaBox className="text-gray-600" />
+                Goods Summary
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-600">
+                      <th className="text-left p-2 font-semibold">Item</th>
+                      <th className="text-left p-2 font-semibold">Qty</th>
+                      <th className="text-left p-2 font-semibold">Per Unit</th>
+                      <th className="text-left p-2 font-semibold">
+                        Total Weight
+                      </th>
+                      <th className="text-left p-2 font-semibold">Rate/Unit</th>
+                      <th className="text-left p-2 font-semibold">
+                        Total Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consignment?.goods?.map((good, index) => {
+                      const totalWeight =
+                        (good.weightPerUnit || 0) * (good.quantity || 0);
+                      const totalAmount =
+                        totalWeight * (good.commodityPerUnitCost || 0);
+
+                      return (
+                        <tr
+                          key={index}
+                          className="border-b border-gray-100 dark:border-gray-700"
+                        >
+                          <td className="p-2">{good?.commodityItem?.name}</td>
+                          <td className="p-2">
+                            {good?.quantity?.toLocaleString()}
+                          </td>
+                          <td className="p-2">
+                            {good?.weightPerUnit?.toFixed(1)} kg
+                          </td>
+                          <td className="p-2">
+                            {totalWeight?.toLocaleString()} kg
+                          </td>
+                          <td className="p-2">
+                            {good?.commodityPerUnitCost?.toLocaleString()}
+                          </td>
+                          <td className="p-2 font-semibold">
+                            {totalAmount?.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Final Summary */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaCalculator className="text-red-600" />
+                  Cost Breakdown
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Airway Bill"
+                    value={totalAirwayBill?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Goods Cost"
+                    value={totalGoodsAmount?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Packing Cost"
+                    value={totalPackingAmount?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Packaging Cost"
+                    value={totalPackagingCost?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Custom Fee"
+                    value={customFee?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Daily Expenses"
+                    value={dailyExpenses?.toLocaleString()}
+                  />
+                  <div className="border-t border-red-200 dark:border-red-700 pt-2 mt-2">
+                    <InfoRow
+                      label="Total Cost"
+                      value={totalCost?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <FaMoneyBillWave className="text-green-600" />
+                  Recovery & Summary
+                </h3>
+                <div className="space-y-2">
+                  <InfoRow
+                    label="Recovery Amount"
+                    value={consignment?.recoveryDone?.amount?.toLocaleString()}
+                  />
+                  <InfoRow
+                    label="Currency"
+                    value={consignment?.recoveryDone?.currency}
+                  />
+                  <InfoRow
+                    label="Exchange Rate"
+                    value={consignment?.recoveryDone?.exchangeRate}
+                  />
+                  <div className="border-t border-green-200 dark:border-green-700 pt-2 mt-2">
+                    <InfoRow
+                      label="Total Recovery"
+                      value={totalRecovery?.toLocaleString()}
+                      highlight
+                    />
+                  </div>
+                  <div
+                    className={`mt-4 p-3 rounded-lg ${
+                      grandTotal > 0
+                        ? "bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-700"
+                        : "bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-700"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span
+                        className={`font-bold text-lg ${
+                          grandTotal > 0
+                            ? "text-green-700 dark:text-green-300"
+                            : "text-red-700 dark:text-red-300"
+                        }`}
+                      >
+                        {grandTotal > 0 ? "Profit" : "Loss"}
+                      </span>
+                      <span
+                        className={`font-bold text-xl ${
+                          grandTotal > 0
+                            ? "text-green-700 dark:text-green-300"
+                            : "text-red-700 dark:text-red-300"
+                        }`}
+                      >
+                        {Math.abs(grandTotal)?.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Sidebar - Action Buttons */}
+        <div className="lg:col-span-1">
+          <motion.div
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 sticky top-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+              <FaDownload className="text-blue-500" />
+              Export Options
+            </h3>
+
+            <div className="space-y-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={exportToExcel}
+                className="w-full bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 font-semibold"
+              >
+                <FaFileExcel className="text-lg" />
+                Export to Excel
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={generatePDF}
+                className="w-full bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 font-semibold"
+              >
+                <FaFilePdf className="text-lg" />
+                Download PDF
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handlePrint}
+                className="w-full bg-gray-600 hover:bg-gray-700 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 font-semibold"
+              >
+                <FaPrint className="text-lg" />
+                Take Print
+              </motion.button>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+              <h4 className="font-semibold text-gray-800 dark:text-white mb-3">
+                Quick Stats
+              </h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Net Weight
+                  </span>
+                  <span className="font-semibold">
+                    {netWeight?.toLocaleString()} kg
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Gross Weight
+                  </span>
+                  <span className="font-semibold">
+                    {grossWeight?.toLocaleString()} kg
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Total Items
+                  </span>
+                  <span className="font-semibold">
+                    {consignment?.goods?.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       {/* Print Styles */}
       <style jsx global>{`
         @media print {
-          body {
-            background: white !important;
-            color: black !important;
-            font-size: 12px;
+          body * {
+            visibility: hidden;
           }
-          .print-area {
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-            background: white !important;
-            color: black !important;
+          #invoice,
+          #invoice * {
+            visibility: visible;
           }
-          table {
-            page-break-inside: avoid;
-          }
-          tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-          }
-          thead {
-            display: table-header-group;
+          #invoice {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 20px;
+            box-shadow: none;
+            background: white;
           }
           .no-print {
             display: none !important;
@@ -1344,5 +1446,25 @@ const Invoice = () => {
     </motion.div>
   );
 };
+
+// Helper component for consistent info rows
+const InfoRow = ({ label, value, highlight = false }) => (
+  <div
+    className={`flex justify-between items-center py-1 ${
+      highlight ? "font-semibold" : ""
+    }`}
+  >
+    <span className="text-gray-600 dark:text-gray-300">{label}:</span>
+    <span
+      className={`${
+        highlight
+          ? "text-blue-600 dark:text-blue-400 font-bold"
+          : "text-gray-800 dark:text-white"
+      }`}
+    >
+      {value || "N/A"}
+    </span>
+  </div>
+);
 
 export default Invoice;

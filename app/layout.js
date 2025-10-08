@@ -1,7 +1,8 @@
 import "./globals.css";
 import Providers from "@utils/provider";
-import font from "@utils/fonts";
+import font, { inter, poppins } from "@utils/fonts";
 import { ThemeProvider } from "../context/ThemeContext";
+import PaletteSwitcher from "@components/PaletteSwitcher";
 
 export const metadata = {
   title: "FarmExpo",
@@ -10,12 +11,11 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body
-        className={`${font.roboto.className} bg-LightPBg dark:bg-DarkPBg text-LightPText dark:text-DarkPText`}
-      >
+    <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
+      <body className={`font-inter`}>
         <ThemeProvider>
           <Providers>{children}</Providers>
+          <PaletteSwitcher />
         </ThemeProvider>
       </body>
     </html>

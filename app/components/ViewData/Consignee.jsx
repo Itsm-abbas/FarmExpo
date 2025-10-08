@@ -2,97 +2,120 @@
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { useRouter } from "next/navigation";
-import React, { useState } from "react";
-import { MdEdit } from "react-icons/md";
+import React from "react";
+import { MdEdit, MdAdd, MdPerson } from "react-icons/md";
 import Swal from "sweetalert2";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 import { fetchConsignees } from "@constants/consignmentAPI";
 import axiosInstance from "@utils/axiosConfig";
+import { motion } from "framer-motion";
+
 const ViewConsignee = () => {
   const queryClient = useQueryClient();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   const router = useRouter();
-  const [editLoader, setEditLoader] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["consignees"],
     queryFn: fetchConsignees,
   });
-  const deleteConsignee = useMutation({
+
+  const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      await axios.delete(`/api/consignee/${id}`);
+      await axiosInstance.delete(`/consignee/${id}`);
     },
-    onSuccess: () => {},
-  });
-  const handleDelete = async (id) => {
-    try {
-      const result = await Swal.fire({
-        title: "Are you sure?",
-        text: "Do you really want to delete this consignee? This action cannot be undone.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
+    onSuccess: () => {
+      queryClient.invalidateQueries(["consignees"]);
+      Swal.fire({
+        position: "top-center",
+        icon: "success",
+        title: "Deleted Successfully!",
+        text: "Consignee has been removed from the system.",
+        showConfirmButton: false,
+        timer: 2000,
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        iconColor: "rgb(var(--color-primary))",
       });
+    },
+    onError: (error) => {
+      Swal.fire({
+        title: "Error!",
+        text: error.message || "Failed to delete consignee",
+        icon: "error",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
+      });
+    },
+  });
 
-      if (result.isConfirmed) {
-        const response = await axiosInstance.delete(`/consignee/${id}`);
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Delete Consignee?",
+      text: "This will permanently remove the consignee and all associated data. This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "rgb(var(--color-accent))",
+      cancelButtonColor: "rgb(var(--color-primary))",
+      confirmButtonText: "Yes, delete it!",
+      cancelButtonText: "Cancel",
+      background: "rgb(var(--color-background))",
+      color: "rgb(var(--color-text))",
+    });
 
-        if (response.status === 200) {
-          Swal.fire({
-            position: "top-center",
-            icon: "success",
-            title: "Deleted Successfully",
-            showConfirmButton: false,
-            timer: 1500,
-          });
-
-          queryClient.invalidateQueries(["consignees"]);
-        } else {
-          throw new Error("Unexpected response status: " + response.status);
-        }
-      }
-    } catch (error) {
-      Swal.fire("Error!", error.message, "error");
+    if (result.isConfirmed) {
+      deleteMutation.mutate(id);
     }
   };
+
   const handleEdit = async (id) => {
-    setEditLoader(true);
     router.push(`/consignment/consignee/add-consignee?id=${id}`);
-    setEditLoader(false);
   };
+
   const headers = [
-    { label: "s.no" },
-    { label: "name", accessor: "vendor.name" },
-    { label: "ntn", accessor: "vendor.ntn" },
-    { label: "address", accessor: "vendor.address" },
-    { label: "station", accessor: "vendor.station" },
-    { label: "country", accessor: "vendor.country" },
-    { label: "balance", accessor: "vendor.balance" },
-    { label: "currency", accessor: "vendor.currency" },
-    { label: "Actions" }, // No accessor for actions column
+    { key: "sno", label: "#" },
+    { key: "name", label: "Name", accessor: "vendor.name" },
+    { key: "ntn", label: "NTN", accessor: "vendor.ntn" },
+    { key: "address", label: "Address", accessor: "vendor.address" },
+    { key: "station", label: "Station", accessor: "vendor.station" },
+    { key: "country", label: "Country", accessor: "vendor.country" },
+    {
+      key: "balance",
+      label: "Balance",
+      accessor: "vendor.balance",
+      format: "currency",
+    },
+    { key: "currency", label: "Currency", accessor: "vendor.currency" },
+    { key: "actions", label: "Actions" },
   ];
 
   return (
-    <>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-6"
+    >
       <ReusableTable
-        title="Consignee"
+        title="Consignees"
         headers={headers}
         data={data}
         isLoading={isLoading}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        noDataMessage="No consignees found. Add your first consignee to get started."
         addButton={
-          <LinkButton
-            title="Add Consignee"
-            href="/consignment/consignee/add-consignee"
-            icon={MdEdit}
-            desc="Click to add new consignee"
-          />
+          <div className="text-center">
+            <LinkButton
+              title="Add New Consignee"
+              href="/consignment/consignee/add-consignee"
+              icon={MdAdd}
+              desc="Click to add a new consignee to your system"
+            />
+          </div>
         }
       />
-    </>
+    </motion.div>
   );
 };
 

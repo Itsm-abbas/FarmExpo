@@ -1,8 +1,11 @@
+// app/api/consignee/[id]/route.js
 import prisma from "@lib/prisma";
+
 import { NextResponse } from "next/server";
 
 export async function GET(_, { params }) {
-  const id = parseInt(params.id);
+  let { id } = await params;
+  id = Number(id);
   const consignee = await prisma.consignee.findUnique({
     where: { id },
     include: { vendor: true },
@@ -14,23 +17,26 @@ export async function GET(_, { params }) {
 }
 
 export async function PUT(req, { params }) {
-  let { id } = await params;
-  id = Number(id);
+  const id = parseInt(params.id);
   const body = await req.json();
-
+  console.log("PUT /api/consignee/[id] body:", body);
   try {
     const consignee = await prisma.consignee.findUnique({ where: { id } });
     if (!consignee) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-
-    const updatedVendor = await prisma.vendor.update({
+    console.log("Found consignee:", consignee);
+    const updatedConsignee = await prisma.vendor.update({
       where: { id: consignee.vendorId },
       data: body,
     });
 
-    return NextResponse.json({ message: "Updated", vendor: updatedVendor });
+    return NextResponse.json({
+      message: "Updated",
+      consignee: updatedConsignee,
+    });
   } catch (error) {
+    console.error("Consignee update error:", error);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }

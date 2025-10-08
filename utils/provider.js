@@ -1,3 +1,4 @@
+// utils/provider.js
 "use client";
 
 import Header from "@components/Header";
@@ -19,7 +20,7 @@ export default function Providers({ children }) {
   return (
     <QueryClientProvider client={queryClient}>
       {showHeader && <Header />}
-      <div className="px-5 sm:px-8 md:px-16">{children}</div>
+      <div>{children}</div>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
