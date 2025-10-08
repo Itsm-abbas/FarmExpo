@@ -191,7 +191,6 @@ export default function VendorTransactionPage() {
     }
   };
 
-  // --- Enhanced PDF Export with Styling ---
   // --- Fixed PDF Export Function ---
   const exportToPDF = async () => {
     if (!data || !data.transactions.length) {
