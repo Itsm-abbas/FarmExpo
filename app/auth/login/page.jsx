@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -12,7 +12,7 @@ import {
   FaArrowRight,
   FaSeedling,
 } from "react-icons/fa";
-import { setCookie } from "cookies-next";
+import { setCookie, getCookie } from "cookies-next";
 import Link from "next/link";
 
 export default function Login() {
@@ -21,6 +21,14 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    const token = getCookie("token");
+    if (token) {
+      router.push("/");
+    }
+  }, [router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -72,8 +80,10 @@ export default function Login() {
         color: "rgb(var(--color-text))",
       });
 
-      // Redirect to home page after success
-      router.push("/");
+      // Use window.location.replace for reliable redirect in production
+      setTimeout(() => {
+        window.location.replace("/");
+      }, 1000);
     } catch (error) {
       Swal.fire({
         position: "top-center",
@@ -258,35 +268,6 @@ export default function Login() {
               )}
             </motion.button>
           </form>
-
-          {/* Divider */}
-          {/* <motion.div
-            className="flex items-center my-6"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            <div className="flex-1 border-t border-primary/10"></div>
-            <span className="px-4 text-text/40 text-sm">New to Farm Expo?</span>
-            <div className="flex-1 border-t border-primary/10"></div>
-          </motion.div> */}
-
-          {/* Create Account Button */}
-          {/* <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-          >
-            <Link href="/auth/signup">
-              <button
-                className="w-full flex items-center justify-center gap-2 bg-secondary/10 text-text border-2 border-secondary/20 hover:bg-secondary/20 px-6 py-3 rounded-xl transition-all duration-200 font-medium"
-                disabled={isLoading}
-              >
-                <FaSeedling className="text-sm" />
-                Create New Account
-              </button>
-            </Link>
-          </motion.div> */}
         </motion.div>
 
         {/* Footer */}
