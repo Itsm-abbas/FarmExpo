@@ -73,9 +73,7 @@ export default function Login() {
       });
 
       // Redirect to home page after success
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
+      router.push("/");
     } catch (error) {
       Swal.fire({
         position: "top-center",
