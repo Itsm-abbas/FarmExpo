@@ -441,67 +441,9 @@ export default function Login() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
               >
-<<<<<<< HEAD
                 <label
                   htmlFor="email"
                   className="flex items-center gap-2 text-text text-sm font-medium mb-3"
-=======
-                <FaUser className="text-primary/60 text-sm" />
-                Email Address
-              </label>
-              <div className="relative">
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email address"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none pl-10"
-                  required
-                  disabled={isLoading}
-                />
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text/40">
-                  <FaUser className="text-sm" />
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <label
-                htmlFor="password"
-                className="flex items-center gap-2 text-text text-sm font-medium mb-3"
-              >
-                <FaLock className="text-primary/60 text-sm" />
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                  className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none pl-10 pr-10"
-                  required
-                  disabled={isLoading}
-                />
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text/40">
-                  <FaLock className="text-sm" />
-                </div>
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text/40 hover:text-text/60 transition-colors duration-200"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
->>>>>>> 89c1ee4bf1e88431cdeb1ef51420b8c1ba0da593
                 >
                   <FaUser className="text-primary/60 text-sm" />
                   Email Address
