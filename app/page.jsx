@@ -573,7 +573,7 @@ export default function Home() {
                 <div className="pt-3 sm:pt-4 border-t border-primary/10">
                   <LinkButton
                     title="Show All Consignments"
-                    desc="View complete consignment history"
+                    desc="Click to view all"
                     href="consignment/all-consignments"
                     icon={MdVisibility}
                     className="text-sm"

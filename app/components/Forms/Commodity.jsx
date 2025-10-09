@@ -166,7 +166,7 @@ export default function CommodityForm() {
         className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
         variants={itemVariants}
       >
-        <div className="p-8 space-y-6">
+        <div className="p-5 md:p-8 space-y-6">
           <div className="space-y-6">
             <Input
               id="number"

@@ -63,7 +63,7 @@ const Input = ({
           type={inputType}
           className={`
             w-full bg-background text-text
-            border-2 ${getBorderColor()} rounded-xl pt-5 pb-3 px-4
+            border-2 ${getBorderColor()} rounded-xl pt-3 md:pt-5 pb-3 px-4
             ${getRingColor()} outline-none transition-all duration-200
             ${
               disabled

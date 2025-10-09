@@ -244,7 +244,7 @@ export default function FinancialInstrumentForm() {
         className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
         variants={itemVariants}
       >
-        <div className="p-8">
+        <div className="p-5 md:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column */}
