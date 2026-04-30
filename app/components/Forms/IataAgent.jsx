@@ -218,7 +218,7 @@ export default function IataAgent() {
         className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
         variants={itemVariants}
       >
-        <div className="p-8">
+        <div className="p-5 md:p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Basic Information */}
             <div className="space-y-4">
