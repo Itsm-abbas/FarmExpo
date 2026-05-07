@@ -66,7 +66,7 @@ export default function Login() {
       if (!response.ok) {
         const errorMessage = await response.json();
         throw new Error(
-          errorMessage.description || "Invalid credentials, please try again."
+          errorMessage.description || "Invalid credentials, please try again.",
         );
       }
 
@@ -76,7 +76,7 @@ export default function Login() {
       if (rememberMe) {
         setCookie("token", result.token, { maxAge: 30 * 24 * 60 * 60 }); // 30 days
       } else {
-        setCookie("token", result.token);
+        setCookie("token", result.token, { maxAge: 30 * 24 * 60 });
       }
 
       showSuccessMessage();
