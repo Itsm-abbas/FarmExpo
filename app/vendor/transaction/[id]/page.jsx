@@ -21,19 +21,20 @@ import {
   FaFileExcel,
 } from "react-icons/fa";
 
-// Dynamic imports to avoid SSR issues
-const loadJsPDF = async () => {
-  const { jsPDF } = await import("jspdf");
-  return jsPDF;
-};
-
-import * as XLSX from "xlsx";
 import DataLoader from "@components/Loader/dataLoader";
 import Loading from "app/loading";
+import useSession from "@hooks/useSession";
+
+const errorText = async (res, fallback) => {
+  const body = await res.json().catch(() => ({}));
+  return typeof body.error === "string" ? body.error : fallback;
+};
 
 export default function VendorTransactionPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  // Staff can add entries; correcting or removing them is admin-only.
+  const { permissions, organization } = useSession();
 
   // ✅ Fetch vendor + transactions (with balanceAfter from DB)
   const { data, isLoading } = useQuery({
@@ -57,270 +58,52 @@ export default function VendorTransactionPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // --- Excel Export Function ---
-  const exportToExcel = () => {
-    if (!data || !data.transactions.length) {
-      Swal.fire({
-        position: "top-center",
-        icon: "warning",
-        title: "No Data",
-        text: "No transactions available to export",
-        confirmButtonColor: "rgb(var(--color-primary))",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-      });
-      return;
-    }
-
+  // --- Exports: a statement of account, as PDF (in the organization's
+  // template and letterhead) or as an Excel workbook ---
+  const [exporting, setExporting] = useState(null);
+  const exportStatement = async (kind) => {
+    if (!data?.vendor) return;
+    setExporting(kind);
     try {
-      // Prepare data for Excel
-      const excelData = data.transactions.map((transaction, index) => ({
-        "S.No": index + 1,
-        Date: new Date(transaction.createdAt).toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        }),
-        "Transaction ID": transaction.transactionId || "-",
-        "Voucher ID": transaction.voucherId || "-",
-        Details: transaction.details,
-        Type: transaction.type.toUpperCase(),
-        "Credit Amount":
-          transaction.type === "credit" ? Number(transaction.amount) : 0,
-        "Debit Amount":
-          transaction.type === "debit" ? Number(transaction.amount) : 0,
-        "Balance After": Number(transaction.balanceAfter),
-        Currency: data.vendor.currency,
-      }));
-
-      // Calculate totals
-      const totalCredits = data.transactions
-        .filter((t) => t.type === "credit")
-        .reduce((sum, t) => sum + Number(t.amount), 0);
-
-      const totalDebits = data.transactions
-        .filter((t) => t.type === "debit")
-        .reduce((sum, t) => sum + Number(t.amount), 0);
-
-      // Create workbook and worksheet
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(excelData);
-
-      // Add summary data
-      const summaryData = [
-        ["Vendor Transaction Ledger Report"],
-        [`Vendor: ${data.vendor.name}`],
-        [`Report Generated: ${new Date().toLocaleString()}`],
-        [
-          `Current Balance: ${data.vendor.currency} ${Number(
-            data.vendor.balance
-          ).toLocaleString()}`,
-        ],
-        [
-          `Total Credits: ${
-            data.vendor.currency
-          } ${totalCredits.toLocaleString()}`,
-        ],
-        [
-          `Total Debits: ${
-            data.vendor.currency
-          } ${totalDebits.toLocaleString()}`,
-        ],
-        [
-          `Net Position: ${data.vendor.currency} ${(
-            totalCredits - totalDebits
-          ).toLocaleString()}`,
-        ],
-        [""], // Empty row for spacing
-      ];
-
-      // Add headers to the summary
-      XLSX.utils.sheet_add_aoa(ws, summaryData, { origin: -1 });
-
-      // Set column widths
-      const colWidths = [
-        { wch: 8 }, // S.No
-        { wch: 12 }, // Date
-        { wch: 20 }, // Transaction ID
-        { wch: 15 }, // Voucher ID
-        { wch: 40 }, // Details
-        { wch: 10 }, // Type
-        { wch: 15 }, // Credit Amount
-        { wch: 15 }, // Debit Amount
-        { wch: 15 }, // Balance After
-        { wch: 10 }, // Currency
-      ];
-      ws["!cols"] = colWidths;
-
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, "Transaction Ledger");
-
-      // Generate Excel file and download
-      XLSX.writeFile(
-        wb,
-        `Transaction-Ledger-${data.vendor.name}-${
-          new Date().toISOString().split("T")[0]
-        }.xlsx`
+      const pdf = await import("@utils/pdf");
+      const name = pdf.fileSlug(
+        `statement-${data.vendor.name}-${new Date().toISOString().slice(0, 10)}`
       );
-
-      Swal.fire({
-        position: "top-center",
-        icon: "success",
-        title: "Excel Exported!",
-        text: "Transaction ledger has been downloaded as Excel",
-        showConfirmButton: false,
-        timer: 2000,
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-      });
-    } catch (error) {
-      console.error("Excel export error:", error);
-      Swal.fire({
-        position: "top-center",
-        icon: "error",
-        title: "Export Failed",
-        text: "Failed to generate Excel file. Please try again.",
-        confirmButtonColor: "rgb(var(--color-primary))",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-      });
-    }
-  };
-
-  // --- Alternative Simple PDF Export (if autoTable still doesn't work) ---
-  const exportToPDFSimple = async () => {
-    if (!data || !data.transactions.length) {
-      Swal.fire({
-        position: "top-center",
-        icon: "warning",
-        title: "No Data",
-        text: "No transactions available to export",
-        confirmButtonColor: "rgb(var(--color-primary))",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-      });
-      return;
-    }
-
-    try {
-      const jsPDF = await loadJsPDF();
-      const doc = new jsPDF();
-
-      // Add title
-      doc.setFontSize(16);
-      doc.setTextColor(40, 40, 40);
-      doc.text(`Transaction Ledger - ${data.vendor.name}`, 14, 15);
-
-      // Add header info
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 25);
-      doc.text(
-        `Balance: ${data.vendor.currency} ${Number(
-          data.vendor.balance
-        ).toLocaleString()}`,
-        14,
-        32
-      );
-      doc.text(`Total Transactions: ${data.transactions.length}`, 14, 39);
-
-      // Simple table header
-      doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      doc.setFillColor(97, 140, 143);
-      doc.rect(14, 45, 182, 6, "F");
-      doc.text("Date", 16, 49);
-      doc.text("Trans ID", 40, 49);
-      doc.text("Voucher ID", 70, 49);
-      doc.text("Details", 100, 49);
-      doc.text("Type", 150, 49);
-      doc.text("Amount", 165, 49);
-      doc.text("Balance", 185, 49);
-
-      // Table rows
-      let yPosition = 53;
-      doc.setTextColor(40, 40, 40);
-
-      data.transactions.forEach((transaction, index) => {
-        if (yPosition > 280) {
-          doc.addPage();
-          yPosition = 20;
-          // Add header on new page
-          doc.setFontSize(10);
-          doc.text(`Transaction Ledger - ${data.vendor.name} (Cont.)`, 14, 15);
-          yPosition = 25;
-        }
-
-        doc.setFontSize(7);
-        doc.text(
-          new Date(transaction.createdAt).toLocaleDateString("en-GB"),
-          16,
-          yPosition
-        );
-        doc.text(transaction.transactionId || "-", 40, yPosition);
-        doc.text(transaction.voucherId || "-", 70, yPosition);
-
-        // Truncate long details
-        const details =
-          transaction.details.length > 25
-            ? transaction.details.substring(0, 25) + "..."
-            : transaction.details;
-        doc.text(details, 100, yPosition);
-
-        doc.text(transaction.type.toUpperCase(), 150, yPosition);
-        doc.text(Number(transaction.amount).toLocaleString(), 165, yPosition);
-        doc.text(
-          Number(transaction.balanceAfter).toLocaleString(),
-          185,
-          yPosition
-        );
-
-        yPosition += 4;
-      });
-
-      // Add footer
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7);
-        doc.setTextColor(150, 150, 150);
-        doc.text(
-          `Page ${i} of ${pageCount} - Farm Expo Management System`,
-          105,
-          290,
-          { align: "center" }
-        );
+      if (kind === "excel") {
+        const { exportStatementExcel } = await import("@utils/excel");
+        exportStatementExcel({
+          vendor: data.vendor,
+          transactions: data.transactions,
+          organization,
+          filename: `${name}.xlsx`,
+        });
+      } else {
+        const branding = await pdf.loadBranding(organization);
+        const bytes = await pdf.buildStatementPdf({
+          vendor: data.vendor,
+          transactions: data.transactions,
+          organization,
+          branding,
+        });
+        pdf.downloadFile(bytes, `${name}.pdf`);
       }
-
-      doc.save(
-        `Ledger-${data.vendor.name.replace(/\s+/g, "-")}-${
-          new Date().toISOString().split("T")[0]
-        }.pdf`
-      );
-
-      Swal.fire({
-        position: "top-center",
-        icon: "success",
-        title: "PDF Exported!",
-        text: "Transaction ledger has been downloaded",
-        showConfirmButton: false,
-        timer: 2000,
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-      });
     } catch (error) {
-      console.error("Simple PDF export error:", error);
+      console.error("Statement export failed:", error);
       Swal.fire({
         position: "top-center",
         icon: "error",
-        title: "Export Failed",
-        text: "Failed to generate PDF. Please try again.",
+        title: "Export failed",
+        text: error.message || "Couldn't create the file. Try again.",
         confirmButtonColor: "rgb(var(--color-primary))",
         background: "rgb(var(--color-background))",
         color: "rgb(var(--color-text))",
       });
+    } finally {
+      setExporting(null);
     }
   };
+  const exportToExcel = () => exportStatement("excel");
+  const exportToPdf = () => exportStatement("pdf");
 
   // --- Mutations ---
   const addMutation = useMutation({
@@ -330,10 +113,12 @@ export default function VendorTransactionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to add transaction");
+      if (!res.ok)
+        throw new Error(await errorText(res, "Failed to add transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["vendorTransactions", id]);
+      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
+      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -372,10 +157,11 @@ export default function VendorTransactionPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok)
-        throw new Error("Only the most recent transaction can be updated");
+        throw new Error(await errorText(res, "Failed to update transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["vendorTransactions", id]);
+      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
+      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
       setShowEdit(false);
       setEditForm(null);
       Swal.fire({
@@ -407,10 +193,12 @@ export default function VendorTransactionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: tid }),
       });
-      if (!res.ok) throw new Error("Failed to delete transaction");
+      if (!res.ok)
+        throw new Error(await errorText(res, "Failed to delete transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["vendorTransactions", id]);
+      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
+      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -511,24 +299,22 @@ export default function VendorTransactionPage() {
               {/* Export Buttons */}
               {data?.transactions?.length > 0 && (
                 <>
-                  <motion.button
+                  <button
                     onClick={exportToExcel}
-                    className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-xl transition-all duration-200 font-medium"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    disabled={Boolean(exporting)}
+                    className="flex items-center gap-2 border border-text/15 bg-surface text-text hover:bg-text/5 px-4 py-2 rounded-xl transition-colors font-medium disabled:opacity-60"
                   >
                     <FaFileExcel className="text-sm" />
-                    Export Excel
-                  </motion.button>
-                  <motion.button
-                    onClick={exportToPDFSimple}
-                    className="flex items-center gap-2 bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-xl transition-all duration-200 font-medium"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    {exporting === "excel" ? "Preparing…" : "Excel statement"}
+                  </button>
+                  <button
+                    onClick={exportToPdf}
+                    disabled={Boolean(exporting)}
+                    className="flex items-center gap-2 border border-text/15 bg-surface text-text hover:bg-text/5 px-4 py-2 rounded-xl transition-colors font-medium disabled:opacity-60"
                   >
                     <FaFilePdf className="text-sm" />
-                    Export PDF
-                  </motion.button>
+                    {exporting === "pdf" ? "Preparing…" : "PDF statement"}
+                  </button>
                 </>
               )}
 
@@ -889,6 +675,22 @@ export default function VendorTransactionPage() {
                             </AnimatePresence>
                           </td>
                           <td className="p-4">
+                            {transaction.source ? (
+                              // Posted from a consignment: change it there.
+                              <div
+                                className="text-center text-xs text-text/60"
+                                title="Posted from the consignment. Edit the consignment to change it."
+                              >
+                                Auto
+                              </div>
+                            ) : !permissions.editLedger ? (
+                              <div
+                                className="text-center text-xs text-text/60"
+                                title="Only an admin can correct or remove ledger entries."
+                              >
+                                —
+                              </div>
+                            ) : (
                             <div className="flex items-center justify-center gap-2">
                               <motion.button
                                 onClick={() => {
@@ -912,6 +714,7 @@ export default function VendorTransactionPage() {
                                 <FaTrash className="text-sm" />
                               </motion.button>
                             </div>
+                            )}
                           </td>
                         </motion.tr>
                       ))}

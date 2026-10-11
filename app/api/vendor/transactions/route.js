@@ -1,171 +1,100 @@
 // app/api/vendor/transactions/route.js
+// Manual ledger entries. Entries posted from consignments (source != null)
+// are managed by lib/ledger.js and can only be changed via the consignment.
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
-// app/api/vendor/transactions/route.js - Update POST handler
+import { recomputeVendorBalance } from "@lib/ledger";
+import {
+  HttpError,
+  TX_OPTIONS,
+  findOwned,
+  ownedBy,
+  parseId,
+  toNumber,
+  withUser,
+} from "@lib/session";
 
-export async function POST(req) {
-  const {
-    vendorId,
-    transactionId,
-    voucherId,
-    type,
+function readEntry(body) {
+  if (!["credit", "debit"].includes(body.type)) {
+    throw new HttpError(400, "Type must be 'credit' or 'debit'");
+  }
+  const amount = toNumber(body.amount, "amount");
+  if (!amount || amount <= 0) throw new HttpError(400, "Invalid amount");
+  return {
+    type: body.type,
     amount,
-    details,
-    consignmentId,
-  } = await req.json();
-  const parsedAmount = parseFloat(amount);
+    details: body.details ?? null,
+    transactionId: String(body.transactionId ?? ""),
+    voucherId: String(body.voucherId ?? ""),
+  };
+}
 
-  // Get vendor current balance
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: vendorId },
-    select: { balance: true },
+async function findOwnedTransaction(id, user) {
+  const txn = await findOwned(prisma.transaction, parseId(id), {
+    vendor: ownedBy(user),
   });
+  if (txn.source) {
+    throw new HttpError(
+      400,
+      `This entry was posted automatically from consignment #${txn.consignmentId}. Edit the consignment instead.`
+    );
+  }
+  return txn;
+}
 
-  if (!vendor) {
-    return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+export const POST = withUser(async (req, { user }) => {
+  const body = await req.json();
+  const vendorId = parseId(body.vendorId);
+  await findOwned(prisma.vendor, vendorId, ownedBy(user));
+
+  let consignmentId = null;
+  if (body.consignmentId) {
+    consignmentId = parseId(body.consignmentId);
+    await findOwned(prisma.consignment, consignmentId, ownedBy(user));
   }
 
-  // Compute new balance (ADD to existing balance)
-  const newBalance =
-    type === "credit"
-      ? vendor.balance + parsedAmount
-      : vendor.balance - parsedAmount;
-
-  // Create transaction with balanceAfter and consignmentId
-  const transaction = await prisma.transaction.create({
-    data: {
-      vendorId,
-      transactionId,
-      voucherId,
-      type,
-      amount: parsedAmount,
-      details,
-      balanceAfter: newBalance,
-      consignmentId: consignmentId ? parseInt(consignmentId) : null, // Add consignment reference
-    },
-  });
-
-  // Update vendor balance (this adds to existing balance)
-  await prisma.vendor.update({
-    where: { id: vendorId },
-    data: { balance: newBalance },
-  });
+  const transaction = await prisma.$transaction(async (tx) => {
+    const created = await tx.transaction.create({
+      data: {
+        ...readEntry(body),
+        vendorId,
+        consignmentId,
+        createdBy: user.id,
+        balanceAfter: 0, // set by recomputeVendorBalance
+      },
+    });
+    await recomputeVendorBalance(tx, vendorId);
+    return tx.transaction.findUnique({ where: { id: created.id } });
+  }, TX_OPTIONS);
 
   return NextResponse.json(transaction);
-}
-export async function PUT(req) {
-  const { id, type, amount, details, transactionId, voucherId } =
-    await req.json();
-  const parsedAmount = parseFloat(amount);
+});
 
-  // Find the existing transaction
-  const existing = await prisma.transaction.findUnique({
-    where: { id },
-  });
+export const PUT = withUser(async (req, { user }) => {
+  const body = await req.json();
+  const existing = await findOwnedTransaction(body.id, user);
 
-  if (!existing) {
-    return NextResponse.json(
-      { error: "Transaction not found" },
-      { status: 404 }
-    );
-  }
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.transaction.update({
+      where: { id: existing.id },
+      data: readEntry(body),
+    });
+    // Recomputing fixes balanceAfter on this entry and every later one.
+    await recomputeVendorBalance(tx, existing.vendorId);
+    return tx.transaction.findUnique({ where: { id: existing.id } });
+  }, TX_OPTIONS);
 
-  // Check if this is the latest transaction for that vendor
-  const lastTransaction = await prisma.transaction.findFirst({
-    where: { vendorId: existing.vendorId },
-    orderBy: { createdAt: "desc" },
-  });
+  return NextResponse.json(updated);
+}, { can: "editLedger" });
 
-  // if (!lastTransaction || lastTransaction.id !== existing.id) {
-  //   return NextResponse.json(
-  //     { error: "Only the most recent transaction can be updated" },
-  //     { status: 400 }
-  //   );
-  // }
-
-  // Reverse old effect on vendor balance
-  await prisma.vendor.update({
-    where: { id: existing.vendorId },
-    data: {
-      balance: {
-        decrement:
-          existing.type === "credit" ? existing.amount : -existing.amount,
-      },
-    },
-  });
-
-  // Update transaction (without afterBalance yet)
-  const updated = await prisma.transaction.update({
-    where: { id },
-    data: {
-      type,
-      amount: parsedAmount,
-      details,
-      transactionId,
-      voucherId,
-    },
-  });
-
-  // Apply new effect to vendor balance
-  const vendor = await prisma.vendor.update({
-    where: { id: updated.vendorId },
-    data: {
-      balance: {
-        increment: updated.type === "credit" ? parsedAmount : -parsedAmount,
-      },
-    },
-  });
-
-  // Update transaction.afterBalance with latest vendor balance
-  const finalTransaction = await prisma.transaction.update({
-    where: { id },
-    data: {
-      balanceAfter: vendor.balance,
-    },
-  });
-
-  return NextResponse.json(finalTransaction);
-}
-
-export async function DELETE(req) {
+export const DELETE = withUser(async (req, { user }) => {
   const { id } = await req.json();
+  const existing = await findOwnedTransaction(id, user);
 
-  // Find the transaction
-  const existing = await prisma.transaction.findUnique({ where: { id } });
-
-  if (!existing) {
-    return NextResponse.json(
-      { error: "Transaction not found" },
-      { status: 404 }
-    );
-  }
-
-  // Check if this is the latest transaction for that vendor
-  const lastTransaction = await prisma.transaction.findFirst({
-    where: { vendorId: existing.vendorId },
-    orderBy: { createdAt: "desc" },
-  });
-
-  // if (!lastTransaction || lastTransaction.id !== existing.id) {
-  //   return NextResponse.json(
-  //     { error: "Only the latest transaction can be deleted" },
-  //     { status: 400 }
-  //   );
-  // }
-
-  // Reverse balance effect
-  await prisma.vendor.update({
-    where: { id: existing.vendorId },
-    data: {
-      balance: {
-        decrement:
-          existing.type === "credit" ? existing.amount : -existing.amount,
-      },
-    },
-  });
-
-  // Delete transaction
-  await prisma.transaction.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.transaction.delete({ where: { id: existing.id } });
+    await recomputeVendorBalance(tx, existing.vendorId);
+  }, TX_OPTIONS);
 
   return NextResponse.json({ success: true });
-}
+}, { can: "editLedger" });

@@ -1,39 +1,33 @@
 // app/api/vendors/transactions/route.js
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyToken } from "@lib/auth";
+import { ownedBy, withUser } from "@lib/session";
 
-function getUserFromCookies() {
-  const cookieStore = cookies();
-  const token = cookieStore.get("token")?.value;
-  if (!token) return null;
-  try {
-    return verifyToken(token);
-  } catch {
-    return null;
-  }
-}
+// What a vendor is to the organization, by which role table points at it.
+const ROLES = ["consignee", "packer", "iataAgent", "customAgent"];
 
-export async function GET() {
-  const user = getUserFromCookies();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Example permission: return vendors belonging to user's account/createdBy. Adapt as needed.
-  const where = {}; // if you need scoped results, add filters like { createdById: user.id } or accountId
-
+export const GET = withUser(async (req, { user }) => {
   const vendors = await prisma.vendor.findMany({
-    where,
+    where: ownedBy(user),
     select: {
       id: true,
       name: true,
       balance: true,
       currency: true,
       _count: { select: { transactions: true } },
+      ...Object.fromEntries(
+        ROLES.map((role) => [role, { select: { id: true }, take: 1 }])
+      ),
     },
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(vendors);
-}
+  return NextResponse.json(
+    vendors.map((vendor) => {
+      const role = ROLES.find((r) => vendor[r].length) || null;
+      const rest = { ...vendor };
+      ROLES.forEach((r) => delete rest[r]);
+      return { ...rest, role };
+    })
+  );
+});

@@ -1,32 +1,28 @@
-import { verifyToken } from "@lib/auth";
 import prisma from "@lib/prisma";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { permissionsFor, withUser } from "@lib/session";
+import {
+  ORGANIZATION_PUBLIC_FIELDS,
+  serializeOrganization,
+} from "@lib/organization";
 
-export async function GET() {
-  const cookieStore = cookies();
-  const token = cookieStore.get("token")?.value;
-
-  const decoded = token ? verifyToken(token) : null;
-
-  if (!decoded) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.id },
+// The signed-in user, their organization and what their role allows.
+export const GET = withUser(async (req, { user }) => {
+  const me = await prisma.user.findUnique({
+    where: { id: user.id },
     select: {
       id: true,
       name: true,
       email: true,
       role: true,
       createdAt: true,
+      organization: { select: ORGANIZATION_PUBLIC_FIELDS },
     },
   });
 
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  return NextResponse.json(user);
-}
+  return NextResponse.json({
+    ...me,
+    organization: serializeOrganization(me.organization),
+    permissions: permissionsFor(me),
+  });
+});

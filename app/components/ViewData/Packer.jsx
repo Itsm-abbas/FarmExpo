@@ -1,4 +1,5 @@
 //components/ViewData/packer.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchPackers } from "@constants/consignmentAPI";
@@ -11,6 +12,8 @@ import { motion } from "framer-motion";
 
 const ViewPacker = () => {
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
   const router = useRouter();
 
   const { isLoading, data } = useQuery({
@@ -23,7 +26,7 @@ const ViewPacker = () => {
       await axiosInstance.delete(`/packer/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["packers"]);
+      queryClient.invalidateQueries({ queryKey: ["packers"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -83,6 +86,7 @@ const ViewPacker = () => {
       label: "Balance",
       accessor: "vendor.balance",
       format: "currency",
+      currencyAccessor: "vendor.currency",
     },
     { key: "currency", label: "Currency", accessor: "vendor.currency" },
     { key: "actions", label: "Actions" },
@@ -181,7 +185,7 @@ const ViewPacker = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No packing service providers found. Add your first packer to get started."
         addButton={

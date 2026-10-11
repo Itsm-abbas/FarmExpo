@@ -1,4 +1,5 @@
 //components/ViewData/customagent.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchCustomAgents } from "@constants/consignmentAPI";
@@ -12,9 +13,11 @@ import { motion } from "framer-motion";
 const ViewCustomAgent = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["customagents"],
+    queryKey: ["customAgents"],
     queryFn: fetchCustomAgents,
   });
 
@@ -23,7 +26,7 @@ const ViewCustomAgent = () => {
       await axiosInstance.delete(`/custom-agent/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["customagents"]);
+      queryClient.invalidateQueries({ queryKey: ["customAgents"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -83,6 +86,7 @@ const ViewCustomAgent = () => {
       label: "Balance",
       accessor: "vendor.balance",
       format: "currency",
+      currencyAccessor: "vendor.currency",
     },
     { key: "currency", label: "Currency", accessor: "vendor.currency" },
     { key: "actions", label: "Actions" },
@@ -100,7 +104,7 @@ const ViewCustomAgent = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No custom agents found. Add your first custom agent to get started."
         addButton={

@@ -1,54 +1,28 @@
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
+import { financialInstrumentData } from "@lib/financialInstruments";
+import { ownedBy, stamp, withUser } from "@lib/session";
 
 // Create Financial Instrument
-export async function POST(req) {
-  try {
-    const data = await req.json();
-    const created = await prisma.financialInstrument.create({
-      data: {
-        number: data.number,
-        traderId: data.traderId,
-        bankName: data.bankName,
-        mode: data.mode,
-        consigneeId: data.consigneeId,
-        deliveryTerm: data.deliveryTerm,
-        currency: data.currency,
-        localDate: new Date(data.localDate),
-        expiryDate: new Date(data.expiryDate),
-        status: data.status,
-        amount: data.amount,
-        balance: data.balance,
-        iban: data.iban,
-      },
-    });
-    return NextResponse.json(created);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "Failed to create financial instrument" },
-      { status: 500 }
-    );
-  }
-}
+export const POST = withUser(async (req, { user }) => {
+  const data = await financialInstrumentData(await req.json(), user);
+  const created = await prisma.financialInstrument.create({
+    data: { ...data, ...stamp(user) },
+  });
+  return NextResponse.json(created);
+});
 
 // Get All Financial Instruments
-export async function GET() {
-  try {
-    const all = await prisma.financialInstrument.findMany({
-      include: {
-        trader: true,
-        consignee: {
-          include: { vendor: true },
-        },
+export const GET = withUser(async (req, { user }) => {
+  const all = await prisma.financialInstrument.findMany({
+    where: ownedBy(user),
+    orderBy: { id: "asc" },
+    include: {
+      trader: true,
+      consignee: {
+        include: { vendor: true },
       },
-    });
-    return NextResponse.json(all);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "Failed to fetch financial instruments" },
-      { status: 500 }
-    );
-  }
-}
+    },
+  });
+  return NextResponse.json(all);
+});

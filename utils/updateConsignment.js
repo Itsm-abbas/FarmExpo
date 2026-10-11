@@ -1,40 +1,15 @@
 // utils/updateConsignment.js
-import { getCookie } from "cookies-next";
+import axiosInstance from "@utils/axiosConfig";
+
+// Sends only the changed fields; the API merges them into the consignment,
+// keeps the status from moving backwards and re-posts the ledger entries.
 const UpdateConsignment = async (consignmentId, updatedFields, status) => {
-  const token = getCookie("token");
   try {
-    // Fetch the existing consignment details
-    const existingResponse = await fetch(`/api/consignment/${consignmentId}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!existingResponse.ok) {
-      throw new Error("Failed to fetch existing consignment.");
-    }
-
-    const existingConsignment = await existingResponse.json();
-
-    // Merge the existing consignment data with the updated fields
-    const updatedConsignment = {
-      ...existingConsignment,
+    const { data } = await axiosInstance.put(`/consignment/${consignmentId}`, {
       ...updatedFields,
       ...(status && { status }),
-    };
-    const response = await fetch(`/api/consignment/${consignmentId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(updatedConsignment),
     });
-    if (!response.ok) {
-      throw new Error("Failed to update consignment.");
-    }
-    const result = await response.json();
-    return result;
+    return data;
   } catch (error) {
     console.error("Error updating consignment:", error);
     throw error;

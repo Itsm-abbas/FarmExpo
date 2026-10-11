@@ -1,4 +1,5 @@
 "use client";
+import { formatMoney } from "@utils/money";
 import React, { useState, useMemo } from "react";
 import {
   MdDelete,
@@ -56,14 +57,14 @@ const ReusableTable = ({
     setExpandedRow(expandedRow === index ? null : index);
   };
 
-  const formatValue = (value, format) => {
+  const formatValue = (value, format, currency) => {
     if (value === null || value === undefined) return "N/A";
 
     switch (format) {
       case "date":
         return new Date(value).toLocaleDateString();
       case "currency":
-        return new Intl.NumberFormat(undefined, {}).format(value);
+        return formatMoney(value, currency);
       case "number":
         return new Intl.NumberFormat().format(value);
       default:
@@ -183,7 +184,10 @@ const ReusableTable = ({
                                     field.accessor
                                       ? getNestedValue(item, field.accessor)
                                       : item[field.key],
-                                    field.format
+                                    field.format,
+                                    field.currencyAccessor
+                                      ? getNestedValue(item, field.currencyAccessor)
+                                      : undefined
                                   )}
                                 </span>
                               </div>
@@ -201,18 +205,20 @@ const ReusableTable = ({
                                 <MdEdit size={14} />
                                 Edit
                               </motion.button>
-                              <motion.button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDelete(item.id);
-                                }}
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm font-medium transition-colors hover:bg-red-600"
-                              >
-                                <MdDelete size={14} />
-                                Delete
-                              </motion.button>
+                              {onDelete && (
+                                <motion.button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete(item.id);
+                                  }}
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm font-medium transition-colors hover:bg-red-600"
+                                >
+                                  <MdDelete size={14} />
+                                  Delete
+                                </motion.button>
+                              )}
                             </div>
                           </motion.div>
                         )}
@@ -288,12 +294,15 @@ const ReusableTable = ({
                                 field.accessor
                                   ? getNestedValue(item, field.accessor)
                                   : item[field.key],
-                                field.format
+                                field.format,
+                                field.currencyAccessor
+                                  ? getNestedValue(item, field.currencyAccessor)
+                                  : undefined
                               )}
                             </td>
                           ))}
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            <div className="flex items-center gap-2">
                               <motion.button
                                 onClick={() => onEdit(item.id)}
                                 whileHover={{ scale: 1.05 }}
@@ -303,15 +312,18 @@ const ReusableTable = ({
                               >
                                 <MdEdit size={16} />
                               </motion.button>
-                              <motion.button
-                                onClick={() => onDelete(item.id)}
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors duration-200"
-                                title="Delete"
-                              >
-                                <MdDelete size={16} />
-                              </motion.button>
+                              {onDelete && (
+                                <motion.button
+                                  onClick={() => onDelete(item.id)}
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors duration-200"
+                                  title="Delete"
+                                  aria-label="Delete"
+                                >
+                                  <MdDelete size={16} />
+                                </motion.button>
+                              )}
                             </div>
                           </td>
                         </motion.tr>

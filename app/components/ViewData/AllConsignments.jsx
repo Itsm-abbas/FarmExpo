@@ -1,3 +1,4 @@
+import useSession from "@hooks/useSession";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DataLoader from "@components/Loader/dataLoader";
@@ -20,6 +21,8 @@ import { FaPrint, FaEye, FaFileExport } from "react-icons/fa";
 
 export default function AllConsignments() {
   const queryClient = useQueryClient();
+  // Only admins may delete consignments.
+  const { isAdmin } = useSession();
   const router = useRouter();
   const [filters, setFilters] = useState({
     fromDate: "",
@@ -130,7 +133,7 @@ export default function AllConsignments() {
       await axiosInstance.delete(`/consignment/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["consignments"]);
+      queryClient.invalidateQueries({ queryKey: ["consignments"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -467,15 +470,17 @@ export default function AllConsignments() {
                                   <MdEdit className="text-sm" />
                                 </motion.button>
 
-                                <motion.button
-                                  onClick={() => handleDelete(item.id)}
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors duration-200 tooltip"
-                                  title="Delete Consignment"
-                                >
-                                  <MdDelete className="text-sm" />
-                                </motion.button>
+                                {isAdmin && (
+                                  <motion.button
+                                    onClick={() => handleDelete(item.id)}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors duration-200 tooltip"
+                                    title="Delete Consignment"
+                                  >
+                                    <MdDelete className="text-sm" />
+                                  </motion.button>
+                                )}
                               </div>
                             </td>
                           </motion.tr>
@@ -579,16 +584,18 @@ export default function AllConsignments() {
                                 <MdEdit className="text-xs" />
                                 Edit
                               </button>
-                              <button
-                                onClick={() => {
-                                  handleDelete(item.id);
-                                  setMobileMenuOpen(null);
-                                }}
-                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/5 transition-colors"
-                              >
-                                <MdDelete className="text-xs" />
-                                Delete
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => {
+                                    handleDelete(item.id);
+                                    setMobileMenuOpen(null);
+                                  }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/5 transition-colors"
+                                >
+                                  <MdDelete className="text-xs" />
+                                  Delete
+                                </button>
+                              )}
                             </motion.div>
                           )}
                         </AnimatePresence>

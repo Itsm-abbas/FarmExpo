@@ -31,7 +31,7 @@ export default function TraderForm({
 
   // Fetch traders from API
   const { data: tradersData, isLoading: LoadingTraders } = useQuery({
-    queryKey: ["Trader"],
+    queryKey: ["traders"],
     queryFn: fetchTraders,
   });
 

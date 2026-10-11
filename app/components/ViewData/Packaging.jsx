@@ -1,4 +1,5 @@
 //components/ViewData/packaging.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchPackaging } from "@constants/consignmentAPI";
@@ -11,6 +12,8 @@ import { motion } from "framer-motion";
 
 const ViewPackaging = () => {
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
   const router = useRouter();
 
   const { isLoading, data } = useQuery({
@@ -23,7 +26,7 @@ const ViewPackaging = () => {
       await axiosInstance.delete(`/packaging/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["packaging"]);
+      queryClient.invalidateQueries({ queryKey: ["packaging"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -83,17 +86,14 @@ const ViewPackaging = () => {
     { key: "actions", label: "Actions" },
   ];
 
-  // Calculate packaging statistics
-  const packagingStats = data?.reduce(
-    (acc, item) => ({
-      totalTypes: (acc.totalTypes || 0) + 1,
-      averageWeight:
-        ((acc.averageWeight || 0) +
-          (parseFloat(item.packagingWeightPerUnit) || 0)) /
-        (acc.totalTypes + 1),
-    }),
-    {}
+  // Calculate packaging statistics: count and mean weight per unit.
+  const totalWeight = (data || []).reduce(
+    (sum, item) => sum + (parseFloat(item.packagingWeightPerUnit) || 0),
+    0
   );
+  const packagingStats = data?.length
+    ? { totalTypes: data.length, averageWeight: totalWeight / data.length }
+    : { totalTypes: 0, averageWeight: 0 };
 
   return (
     <motion.div
@@ -155,7 +155,7 @@ const ViewPackaging = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No packaging types found. Add your first packaging type to get started."
         addButton={

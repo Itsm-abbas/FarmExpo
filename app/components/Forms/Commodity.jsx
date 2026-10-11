@@ -18,7 +18,8 @@ export default function CommodityForm() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const [formData, setFormData] = useState({ name: "", number: "" });
-  const [loading, setLoading] = useState(false);
+  // An existing record shows the loader until its saved values are in.
+  const [loading, setLoading] = useState(Boolean(id));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 

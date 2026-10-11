@@ -1,4 +1,5 @@
 //components/ViewData/Commodity.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchCommodity } from "@constants/consignmentAPI";
@@ -13,6 +14,8 @@ import { motion } from "framer-motion";
 const ViewCommodity = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
 
   const { isLoading, data } = useQuery({
     queryKey: ["commodities"],
@@ -49,7 +52,7 @@ const ViewCommodity = () => {
           iconColor: "rgb(var(--color-primary))",
         });
 
-        queryClient.invalidateQueries(["commodities"]);
+        queryClient.invalidateQueries({ queryKey: ["commodities"] });
       }
     } catch (error) {
       Swal.fire({
@@ -86,7 +89,7 @@ const ViewCommodity = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No commodities found. Add your first commodity to get started."
         addButton={

@@ -25,7 +25,7 @@ export default function FinancialInstrumentUtilizedForm() {
   });
 
   const { isLoading: FiLoading, data: FiData } = useQuery({
-    queryKey: ["financialinstrument"],
+    queryKey: ["financialInstruments"],
     queryFn: fetchFinancialInstrument,
   });
 

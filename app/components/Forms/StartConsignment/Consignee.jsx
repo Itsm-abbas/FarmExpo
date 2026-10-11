@@ -12,7 +12,6 @@ import UpdateConsignment from "@utils/updateConsignment";
 import { useQuery } from "@tanstack/react-query";
 import { fetchConsignees } from "@constants/consignmentAPI";
 import Input from "@components/Input";
-import axiosInstance from "@utils/axiosConfig";
 import {
   FaUser,
   FaMoneyBill,
@@ -27,6 +26,7 @@ export default function ConsigneeForm({
   existingData,
   setFormStatuses,
   setActiveAccordion,
+  formStatus,
   isLocked = false,
 }) {
   const router = useRouter();
@@ -43,9 +43,9 @@ export default function ConsigneeForm({
   useEffect(() => {
     if (existingData) {
       setSelectedConsignee(existingData);
-      setBalance(existingData?.balance || 0);
     }
-  }, [existingData]);
+    setBalance(formStatus?.consigneeAmount || 0);
+  }, [existingData, formStatus?.consigneeAmount]);
 
   const handleConsigneeChange = (e) => {
     const selectedId = e.target.value;
@@ -56,7 +56,6 @@ export default function ConsigneeForm({
         (t) => t.id === parseInt(selectedId)
       );
       setSelectedConsignee(selectedConsignee);
-      setBalance(selectedConsignee?.vendor?.balance || 0);
     }
   };
 
@@ -89,82 +88,18 @@ export default function ConsigneeForm({
     setError("");
 
     try {
-      let updatedBalance = selectedConsignee.balance || 0;
-      const balanceAmount = parseFloat(balance) || 0;
-
-      if (balanceAmount !== 0) {
-        // Check if there's an existing transaction for this consignment and vendor
-        const existingTransactionResponse = await axiosInstance.get(
-          `/vendor/transactions/consignment/${Number(
-            consignmentId
-          )}/vendor/${Number(selectedConsignee.vendorId)}`
-        );
-        const existingTransaction = existingTransactionResponse.data;
-
-        if (existingTransaction) {
-          // Update existing transaction
-          await axiosInstance.put(`/vendor/transactions`, {
-            id: existingTransaction.id,
-            type: "credit",
-            amount: balanceAmount,
-            details: `Balance updated for consignment #${consignmentId}`,
-            transactionId: existingTransaction.transactionId,
-            voucherId: existingTransaction.voucherId,
-          });
-        } else {
-          // Create new transaction
-          const transactionPayload = {
-            vendorId: selectedConsignee.vendorId,
-            transactionId: `CONS-${consignmentId}-${Date.now()}`,
-            voucherId: `VOUCHER-CONS-${consignmentId}`,
-            type: "credit",
-            amount: balanceAmount,
-            details: `Initial balance for consignment #${consignmentId}`,
-            consignmentId: parseInt(consignmentId),
-          };
-
-          await axiosInstance.post("/vendor/transactions", transactionPayload);
-        }
-      }
-
-      // Update consignee's balance in the database
-      await axiosInstance.put(`/consignee/${selectedConsignee.id}`, {
-        balance: balanceAmount,
-      });
-
-      // Update consignment
-      if (existingData) {
-        await UpdateConsignment(consignmentId, {
-          consignee: selectedConsignee,
-        });
-      } else {
-        await UpdateConsignment(
-          consignmentId,
-          { consignee: selectedConsignee },
-          "Pending"
-        );
-      }
-
-      // Fetch updated vendor data for accurate UI state
-      const updatedVendorResponse = await axiosInstance.get(
-        `/vendor/transactions/${selectedConsignee.vendorId}`
-      );
-      const updatedVendor = updatedVendorResponse.data.vendor;
-
-      // Update local state
-      const updatedConsignee = {
-        ...selectedConsignee,
-        balance: balanceAmount,
-        vendor: {
-          ...selectedConsignee.vendor,
-          balance: updatedVendor.balance,
+      // The amount is stored on the consignment; the API posts it to the
+      // consignee's ledger (and moves it if the consignee changes).
+      const updated = await UpdateConsignment(
+        consignmentId,
+        {
+          consignee: { id: selectedConsignee.id },
+          consigneeAmount: parseFloat(balance) || 0,
         },
-      };
+        "Pending"
+      );
 
-      setFormStatuses((prev) => ({
-        ...prev,
-        consignee: updatedConsignee,
-      }));
+      setFormStatuses(updated);
 
       setActiveAccordion(null);
 
@@ -361,7 +296,7 @@ export default function ConsigneeForm({
               min="0"
               step="0.01"
               icon={FaMoneyBill}
-              helpertext="Set the initial balance for this consignee"
+              helpertext="Amount billed to this consignee for this consignment. It is posted to their ledger."
             />
           </div>
 

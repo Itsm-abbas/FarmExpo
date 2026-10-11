@@ -2,7 +2,14 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  listQueries,
+  markConsignmentChanged,
+  queryKeys,
+  useConsignment,
+} from "@hooks/queries";
 import { useParams } from "next/navigation";
 import ConsigneeForm from "@components/Forms/StartConsignment/Consignee";
 import TraderForm from "@components/Forms/StartConsignment/Trader";
@@ -28,7 +35,6 @@ import GoodsDeclarationForm from "@forms/StartConsignment/GoodsDeclaration";
 import Link from "next/link";
 import DamageForm from "@components/Forms/StartConsignment/Damage";
 import { motion, AnimatePresence } from "framer-motion";
-import axiosInstance from "@utils/axiosConfig";
 import Swal from "sweetalert2";
 import DailyExpenses from "@components/Forms/StartConsignment/DailyExpenses";
 
@@ -107,46 +113,76 @@ const formsData = [
   },
 ];
 
+// Shown until the consignment has loaded, in the shape of the page, so no
+// empty form can be edited before its saved data arrives.
+function ConsignmentSkeleton({ id }) {
+  return (
+    <div className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <div role="status" aria-live="polite" className="flex items-center justify-center gap-3 text-text/70">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary/25 border-t-primary" />
+          Loading consignment #{id}…
+        </div>
+        <div className="animate-pulse space-y-4" aria-hidden="true">
+          <div className="space-y-4 rounded-2xl border border-text/10 bg-surface p-6">
+            <div className="h-5 w-48 rounded bg-text/10" />
+            <div className="h-3 w-40 rounded bg-text/[0.07]" />
+            <div className="h-3 w-full rounded-full bg-text/[0.07]" />
+          </div>
+          {formsData.map((form) => (
+            <div key={form.id} className="flex items-center gap-4 rounded-2xl border border-text/10 bg-surface p-6">
+              <div className="h-11 w-11 rounded-xl bg-text/10" />
+              <div className="space-y-2">
+                <div className="h-4 w-40 rounded bg-text/10" />
+                <div className="h-3 w-64 rounded bg-text/[0.07]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StartConsignmentPage() {
   const params = useParams();
   const consignmentId = params.id;
-  const [formStatuses, setFormStatuses] = useState({});
+  const queryClient = useQueryClient();
   const [activeAccordion, setActiveAccordion] = useState(null);
   const accordionRefs = useRef({});
-  const [itemsLength, setItemsLength] = useState(0);
-  const [isFulfilled, setIsFulfilled] = useState(false);
-  const [progress, setProgress] = useState(0);
 
-  const fetchFormStatuses = async () => {
-    try {
-      const response = await axiosInstance.get(`/consignment/${consignmentId}`);
-      const { data } = response;
-      setFormStatuses(data);
-      setItemsLength(data.goods?.length || 0);
-      setIsFulfilled(data.status === "Fulfilled");
+  // The consignment lives in the shared cache, so the items page and the
+  // invoice use the same copy and see every save.
+  const {
+    data: consignment,
+    isFetching,
+    isError,
+    refetch,
+  } = useConsignment(consignmentId);
+  const formStatuses = consignment || {};
+  const itemsLength = formStatuses.goods?.length || 0;
+  const isFulfilled = formStatuses.status === "Fulfilled";
+  // Sections open only once the latest data is in, so nothing loads into a
+  // form after someone has started typing.
+  const ready = Boolean(consignment) && !isFetching;
 
-      // Calculate progress
-      const completedForms = formsData.filter((form) => {
-        if (form.key === "goods/packaging") {
-          return data.goods?.some((item) => item?.packaging);
-        }
-        if (form.key === "goods/damage") {
-          return data.goods?.some((item) => item?.damage);
-        }
-        return data[form.key];
-      }).length;
+  const setFormStatuses = useCallback(
+    (update) => {
+      queryClient.setQueryData(queryKeys.consignment(consignmentId), (prev) =>
+        typeof update === "function" ? update(prev || {}) : update
+      );
+      markConsignmentChanged(queryClient, consignmentId);
+    },
+    [queryClient, consignmentId]
+  );
 
-      setProgress(Math.round((completedForms / formsData.length) * 100));
-    } catch (error) {
-      console.error("Error fetching statuses:", error);
-    }
-  };
-
+  // Load every list the sections choose from in parallel, up front.
   useEffect(() => {
-    fetchFormStatuses();
-  }, []);
+    Object.values(listQueries).forEach((query) => queryClient.prefetchQuery(query));
+  }, [queryClient]);
 
   const toggleAccordion = (id) => {
+    if (!ready) return;
     const form = formsData.find((f) => f.id === id);
     const isLocked =
       isFulfilled && form.key !== "recoveryDone" && form.key !== "goods/damage";
@@ -204,6 +240,31 @@ export default function StartConsignmentPage() {
     getFormStatus(form.key)
   ).length;
   const totalForms = formsData.length;
+  // Derived, so the bar moves as soon as a section is saved.
+  const progress = Math.round((completedForms / totalForms) * 100);
+
+  if (!consignment) {
+    if (isError) {
+      return (
+        <div className="mx-auto max-w-xl px-4 py-16 text-center">
+          <h1 className="font-display text-2xl font-semibold text-text">
+            Couldn&apos;t load consignment #{consignmentId}
+          </h1>
+          <p className="mt-2 text-text/65">
+            Check your connection and try again. If it keeps failing, it may
+            have been deleted.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="mt-6 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-accent"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return <ConsignmentSkeleton id={consignmentId} />;
+  }
 
   return (
     <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
@@ -216,7 +277,7 @@ export default function StartConsignmentPage() {
           className="text-center space-y-4"
         >
           <h1 className="text-4xl font-bold font-poppins text-text">
-            Create Consignment
+            Consignment #{consignmentId}
           </h1>
           <p className="text-text/70 font-inter text-lg">
             Complete all sections to finalize your consignment
@@ -277,6 +338,17 @@ export default function StartConsignmentPage() {
           </div>
         </motion.div>
 
+        {!ready && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2.5 rounded-xl border border-text/10 bg-surface px-4 py-3 text-sm text-text/70"
+          >
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/25 border-t-primary" />
+            Getting the latest details. Sections open in a moment.
+          </p>
+        )}
+
         {/* Forms Accordion */}
         <div className="space-y-4">
           {formsData.map((form) => {
@@ -299,7 +371,10 @@ export default function StartConsignmentPage() {
               >
                 {/* Accordion Header */}
                 <div
+                  aria-disabled={!ready}
                   className={`p-6 cursor-pointer transition-all duration-300 ${
+                    ready ? "" : "cursor-wait opacity-60"
+                  } ${
                     isSubmitted
                       ? "bg-primary/10 border-l-4 border-primary"
                       : activeAccordion === form.id

@@ -30,7 +30,8 @@ export default function TraderForm() {
     address: "",
     country: "",
   });
-  const [loading, setLoading] = useState(false);
+  // An existing record shows the loader until its saved values are in.
+  const [loading, setLoading] = useState(Boolean(id));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {

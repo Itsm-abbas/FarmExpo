@@ -1,31 +1,25 @@
 import { NextResponse } from "next/server";
 
-const PUBLIC_ROUTES = ["/auth/login", "/auth/signup"];
-const PUBLIC_API = ["/api/auth/login", "/api/auth/signup", "/api/auth/logout"];
+// Pages for signed-out visitors; signed-in users are sent to the dashboard.
+const GUEST_ROUTES = ["/auth/login", "/auth/signup", "/auth/forgot-password"];
+// Pages anyone may open.
+const PUBLIC_ROUTES = [...GUEST_ROUTES, "/auth/reset-password"];
 
+// Runs on pages only. API routes check the session themselves (lib/session.js),
+// because verifying the JWT needs the Node runtime.
 export function middleware(req) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get("token")?.value;
-
-  // ✅ Allow public auth APIs
-  if (PUBLIC_API.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next();
-  }
+  const isPublic = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+  const isGuestOnly = GUEST_ROUTES.some((route) => pathname.startsWith(route));
 
   // ✅ Logged-in user should not access login/signup
-  if (token && PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+  if (token && isGuestOnly) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // ✅ Block protected pages if no token
-  const protectedPaths =
-    pathname === "/" ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/trader") ||
-    pathname.startsWith("/consignment");
-
-  if (!token && protectedPaths) {
+  // ✅ Block every other page if no token
+  if (!token && !isPublic) {
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
@@ -33,16 +27,6 @@ export function middleware(req) {
 }
 
 export const config = {
-  matcher: [
-    "/",
-    "/auth/login",
-    "/auth/signup",
-    "/admin/:path*",
-    "/dashboard/:path*",
-    "/trader/:path*",
-    "/consignment/:path*",
-    "/api/auth/login",
-    "/api/auth/signup",
-    "/api/auth/logout",
-  ],
+  // Everything except API routes, Next.js internals and static files.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };

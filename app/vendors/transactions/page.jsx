@@ -2,17 +2,22 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
+import Swal from "sweetalert2";
+import useSession from "@hooks/useSession";
 import {
   FaBuilding,
   FaExchangeAlt,
   FaEye,
+  FaSyncAlt,
   FaUsers,
   FaWallet,
 } from "react-icons/fa";
 
 export default function VendorsTransactionsPage() {
+  const queryClient = useQueryClient();
+  const { permissions } = useSession();
   const {
     data: vendors = [],
     isLoading,
@@ -26,6 +31,49 @@ export default function VendorsTransactionsPage() {
     },
     staleTime: 1000 * 60 * 2,
   });
+
+  const resync = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ledger/resync", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to recalculate ledgers");
+      return res.json();
+    },
+    onSuccess: ({ consignments, vendors }) => {
+      queryClient.invalidateQueries({ queryKey: ["vendors-list"] });
+      queryClient.invalidateQueries({ queryKey: ["vendorTransactions"] });
+      Swal.fire({
+        icon: "success",
+        title: "Ledgers recalculated",
+        text: `Re-posted ${consignments} consignment(s) and recomputed ${vendors} vendor balance(s).`,
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
+      });
+    },
+    onError: (error) =>
+      Swal.fire({
+        icon: "error",
+        title: "Recalculation failed",
+        text: error.message,
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+        confirmButtonColor: "rgb(var(--color-primary))",
+      }),
+  });
+
+  const handleResync = async () => {
+    const result = await Swal.fire({
+      icon: "question",
+      title: "Recalculate all ledgers?",
+      text: "Every consignment's airway bill, packing, custom clearance, consignee amount and recovery will be re-posted to the ledgers, and all balances recomputed. Manual entries are kept.",
+      showCancelButton: true,
+      confirmButtonText: "Recalculate",
+      background: "rgb(var(--color-background))",
+      color: "rgb(var(--color-text))",
+      confirmButtonColor: "rgb(var(--color-primary))",
+    });
+    if (result.isConfirmed) resync.mutate();
+  };
 
   if (isError) {
     return (
@@ -113,13 +161,28 @@ export default function VendorsTransactionsPage() {
 
         {/* Vendors Grid */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-poppins font-semibold text-text">
-              Vendor Accounts
-            </h2>
-            <p className="text-text/60 text-sm">
-              Click a vendor to view detailed transactions
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div>
+              <h2 className="text-xl font-poppins font-semibold text-text">
+                Vendor Accounts
+              </h2>
+              <p className="text-text/60 text-sm">
+                Click a vendor to view detailed transactions
+              </p>
+            </div>
+            {permissions.editLedger && (
+              <button
+                onClick={handleResync}
+                disabled={resync.isPending}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl border-2 border-primary/20 text-text hover:bg-primary/10 transition-all duration-200 font-medium disabled:opacity-50"
+                title="Re-post every consignment's costs and recompute all balances"
+              >
+                <FaSyncAlt
+                  className={`text-sm ${resync.isPending ? "animate-spin" : ""}`}
+                />
+                {resync.isPending ? "Recalculating..." : "Recalculate ledgers"}
+              </button>
+            )}
           </div>
 
           {isLoading ? (

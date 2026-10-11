@@ -1,4 +1,6 @@
 //components/ViewData/Trader.jsx
+import { formatMoney } from "@utils/money";
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchFinancialInstrument } from "@constants/consignmentAPI";
@@ -12,9 +14,11 @@ import { motion } from "framer-motion";
 const ViewFI = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["financialinstrument"],
+    queryKey: ["financialInstruments"],
     queryFn: fetchFinancialInstrument,
   });
 
@@ -23,7 +27,7 @@ const ViewFI = () => {
       await axiosInstance.delete(`/financialinstrument/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["financialinstrument"]);
+      queryClient.invalidateQueries({ queryKey: ["financialInstruments"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -71,16 +75,24 @@ const ViewFI = () => {
     router.push(`/consignment/add-financialinstrument?id=${id}`);
   };
 
-  // Calculate financial summary
+  // Calculate financial summary. Instruments can be in different currencies,
+  // so totals are kept per currency rather than added together.
   const financialSummary = data?.reduce(
-    (acc, item) => ({
-      totalAmount: (acc.totalAmount || 0) + (item.amount || 0),
-      totalBalance: (acc.totalBalance || 0) + (item.balance || 0),
-      activeInstruments:
-        (acc.activeInstruments || 0) + (item.balance > 0 ? 1 : 0),
-    }),
-    {}
+    (acc, item) => {
+      const currency = item.currency || "";
+      acc.totalAmount[currency] =
+        (acc.totalAmount[currency] || 0) + (item.amount || 0);
+      acc.totalBalance[currency] =
+        (acc.totalBalance[currency] || 0) + (item.balance || 0);
+      acc.activeInstruments += item.balance > 0 ? 1 : 0;
+      return acc;
+    },
+    { totalAmount: {}, totalBalance: {}, activeInstruments: 0 }
   );
+  const formatTotals = (totals = {}) =>
+    Object.entries(totals)
+      .map(([currency, amount]) => formatMoney(amount, currency))
+      .join(" + ") || formatMoney(0);
 
   const headers = [
     { key: "sno", label: "#" },
@@ -94,12 +106,14 @@ const ViewFI = () => {
       label: "Amount",
       accessor: "amount",
       format: "currency",
+      currencyAccessor: "currency",
     },
     {
       key: "balance",
       label: "Balance",
       accessor: "balance",
       format: "currency",
+      currencyAccessor: "currency",
     },
     { key: "status", label: "Status", accessor: "status" },
     { key: "actions", label: "Actions" },
@@ -135,10 +149,7 @@ const ViewFI = () => {
               <div>
                 <p className="text-text/70 text-sm font-inter">Total Amount</p>
                 <p className="text-2xl font-bold text-text font-poppins">
-                  {new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                  }).format(financialSummary?.totalAmount || 0)}
+                  {formatTotals(financialSummary?.totalAmount)}
                 </p>
               </div>
               <div className="p-2 bg-primary/20 rounded-lg">
@@ -159,10 +170,7 @@ const ViewFI = () => {
                   Outstanding Balance
                 </p>
                 <p className="text-2xl font-bold text-text font-poppins">
-                  {new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                  }).format(financialSummary?.totalBalance || 0)}
+                  {formatTotals(financialSummary?.totalBalance)}
                 </p>
               </div>
               <div className="p-2 bg-accent/20 rounded-lg">
@@ -202,7 +210,7 @@ const ViewFI = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No financial instruments found. Add your first financial instrument to get started."
         addButton={

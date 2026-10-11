@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import Input from "@components/Input";
-import { getCookie } from "cookies-next";
+import axiosInstance from "@utils/axiosConfig";
 import {
   FaExclamationTriangle,
   FaBox,
@@ -18,60 +18,34 @@ const MySwal = withReactContent(Swal);
 export default function DamageForm({
   consignmentId,
   setFormStatuses,
-  setActiveAccordion,
+  formStatus,
   isLocked = false,
 }) {
-  const token = getCookie("token");
   const [loadingStates, setLoadingStates] = useState({});
   const [items, setItems] = useState([]);
   const [formData, setFormData] = useState({});
   const [savedItems, setSavedItems] = useState(new Set());
   const [error, setError] = useState("");
 
+  // The items come with the consignment the page has already loaded.
+  const goods = formStatus?.goods;
   useEffect(() => {
-    const fetchConsignmentData = async () => {
-      try {
-        const response = await fetch(`/api/consignment/${consignmentId}`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) throw new Error("Failed to fetch consignment data.");
-
-        const data = await response.json();
-        setItems(data.goods || []);
-
-        // Initialize form data and track saved items
-        const initialFormData = {};
-        const initialSavedItems = new Set();
-
-        (data.goods || []).forEach((item) => {
-          initialFormData[item.id] = item.damage ?? "";
-          if (item.damage !== null && item.damage !== undefined) {
-            initialSavedItems.add(item.id);
-          }
-        });
-
-        setFormData(initialFormData);
-        setSavedItems(initialSavedItems);
-      } catch (error) {
-        console.error("Error fetching consignment data:", error);
-        setError(error.message);
-        MySwal.fire({
-          icon: "error",
-          title: "Error",
-          text: error.message,
-          background: "rgb(var(--color-background))",
-          color: "rgb(var(--color-text))",
-          confirmButtonColor: "rgb(var(--color-primary))",
-        });
+    const list = goods || [];
+    setItems(list);
+    const initialSavedItems = new Set();
+    list.forEach((item) => {
+      if (item.damage !== null && item.damage !== undefined) {
+        initialSavedItems.add(item.id);
       }
-    };
-
-    fetchConsignmentData();
-  }, [consignmentId, token]);
+    });
+    // Values already typed for other items survive saving one of them.
+    setFormData((prev) =>
+      Object.fromEntries(
+        list.map((item) => [item.id, item.id in prev ? prev[item.id] : item.damage ?? ""])
+      )
+    );
+    setSavedItems(initialSavedItems);
+  }, [goods]);
 
   const handleSubmit = async (itemId) => {
     const damage = parseFloat(formData[itemId]);
@@ -107,21 +81,8 @@ export default function DamageForm({
       const targetItem = items.find((item) => item.id === itemId);
       if (!targetItem) throw new Error("Item not found.");
 
-      const updatedItem = {
-        ...targetItem,
-        damage,
-      };
-
-      const response = await fetch(`/api/consignmentitem/${itemId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(updatedItem),
-      });
-
-      if (!response.ok) throw new Error("Failed to update consignment item.");
+      // Only the damage is sent; the item's other fields keep their values.
+      await axiosInstance.put(`/consignmentitem/${itemId}`, { damage });
 
       const updatedItems = items.map((item) =>
         item.id === itemId ? { ...item, damage } : item

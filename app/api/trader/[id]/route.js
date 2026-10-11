@@ -1,63 +1,40 @@
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
+import { traderSchema } from "@lib/validations/trader";
+import { findOwned, ownedBy, parseId, withUser } from "@lib/session";
 
 // ✅ GET /api/trader/:id
-export async function GET(req, { params }) {
-  const id = parseInt(params.id);
-  if (isNaN(id)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
-
-  try {
-    const trader = await prisma.trader.findUnique({
-      where: { id },
-    });
-
-    if (!trader) {
-      return NextResponse.json({ error: "Trader not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(trader);
-  } catch (error) {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+export const GET = withUser(async (req, { user, params }) => {
+  const trader = await findOwned(
+    prisma.trader,
+    parseId(params.id),
+    ownedBy(user)
+  );
+  return NextResponse.json(trader);
+});
 
 // ✅ PUT /api/trader/:id
-export async function PUT(req, { params }) {
-  const id = parseInt(params.id);
-  if (isNaN(id)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+export const PUT = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  await findOwned(prisma.trader, id, ownedBy(user));
+
+  const parsed = traderSchema.partial().safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors }, { status: 400 });
   }
 
-  const body = await req.json();
+  const updated = await prisma.trader.update({
+    where: { id },
+    data: parsed.data,
+  });
 
-  try {
-    const updated = await prisma.trader.update({
-      where: { id },
-      data: body,
-    });
-
-    return NextResponse.json(updated);
-  } catch (error) {
-    return NextResponse.json({ error: "Update failed" }, { status: 500 });
-  }
-}
+  return NextResponse.json(updated);
+});
 
 // ✅ DELETE /api/trader/:id
-export async function DELETE(req, { params }) {
-  const id = parseInt(params.id);
-  if (isNaN(id)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
-
-  try {
-    await prisma.trader.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ message: "Deleted successfully" });
-  } catch (error) {
-    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
-  }
-}
+export const DELETE = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  await findOwned(prisma.trader, id, ownedBy(user));
+  await prisma.trader.delete({ where: { id } });
+  return NextResponse.json({ message: "Deleted successfully" });
+}, { can: "delete" });

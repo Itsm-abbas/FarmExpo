@@ -1,73 +1,43 @@
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
+import { findOwned, ownedBy, parseId, withUser } from "@lib/session";
+import { consignmentItemData } from "@lib/consignments";
 
-export async function GET(req, { params }) {
-  let { id } = await params;
-  id = Number(id);
-  const consignment = await prisma.consignment.findUnique({
+const ITEM_INCLUDE = { commodityItem: true, packaging: true };
+const itemOwnedBy = (user) => ({ consignment: ownedBy(user) });
+
+export const GET = withUser(async (req, { user, params }) => {
+  const item = await findOwned(
+    prisma.consignmentItem,
+    parseId(params.id),
+    itemOwnedBy(user),
+    { include: ITEM_INCLUDE }
+  );
+  return NextResponse.json(item);
+});
+
+// Partial update: fields that are not sent (e.g. `damage` from the item
+// editor, or quantities from the damage form) keep their current values.
+export const PUT = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  const body = await req.json();
+  const [, data] = await Promise.all([
+    findOwned(prisma.consignmentItem, id, itemOwnedBy(user)),
+    consignmentItemData(prisma, body, user, { partial: true }),
+  ]);
+
+  const updated = await prisma.consignmentItem.update({
     where: { id },
-    include: {
-      trader: true,
-      consignee: { include: { vendor: true } },
-      airwayBill: { include: { iataAgent: { include: { vendor: true } } } },
-      goodsDeclaration: true,
-      customClearance: {
-        include: { customAgent: { include: { vendor: true } } },
-      },
-      goods: { include: { commodityItem: true, packaging: true } },
-      packing: { include: { packer: { include: { vendor: true } } } },
-      recoveryDone: true,
-    },
+    data,
+    include: ITEM_INCLUDE,
   });
 
-  return Response.json(consignment);
-}
+  return NextResponse.json(updated);
+});
 
-export async function PUT(req, { params }) {
-  let { id } = params;
-  id = Number(id);
-  try {
-    const {
-      commodityItem,
-      packaging,
-      weightPerUnit,
-      packagingPerUnitCost,
-      commodityPerUnitCost,
-      quantity,
-      damage,
-      consignmentId,
-    } = await req.json();
-
-    const updated = await prisma.consignmentItem.update({
-      where: { id },
-      data: {
-        commodityItemId: commodityItem.id,
-        packagingId: packaging.id,
-        consignmentId: Number(consignmentId),
-        weightPerUnit: parseFloat(weightPerUnit),
-        packagingPerUnitCost: parseFloat(packagingPerUnitCost),
-        commodityPerUnitCost: parseFloat(commodityPerUnitCost),
-        quantity,
-        damage,
-      },
-      include: {
-        commodityItem: true,
-        packaging: true,
-      },
-    });
-
-    return NextResponse.json(updated);
-  } catch (error) {
-    console.error("Consignment item update error:", error);
-    return NextResponse.json({ error: "Update failed" }, { status: 500 });
-  }
-}
-export async function DELETE(_, { params }) {
-  let { id } = await params;
-  id = Number(id);
-  await prisma.consignmentItem.delete({
-    where: { id },
-  });
-
+export const DELETE = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  await findOwned(prisma.consignmentItem, id, itemOwnedBy(user));
+  await prisma.consignmentItem.delete({ where: { id } });
   return NextResponse.json({ success: true });
-}
+});

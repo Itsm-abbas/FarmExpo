@@ -1,155 +1,113 @@
 // app/api/consignment/[id]/route.js
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
+import { removeConsignmentLedger, syncConsignmentLedger } from "@lib/ledger";
+import { CONSIGNMENT_INCLUDE, consignmentData } from "@lib/consignments";
+import {
+  TX_OPTIONS,
+  findOwned,
+  ownedBy,
+  parseId,
+  withUser,
+} from "@lib/session";
 
 // GET single consignment with nested data
-export async function GET(_, { params }) {
-  try {
-    let { id } = await params;
-    id = Number(id);
+export const GET = withUser(async (req, { user, params }) => {
+  const consignment = await findOwned(
+    prisma.consignment,
+    parseId(params.id),
+    ownedBy(user),
+    { include: CONSIGNMENT_INCLUDE }
+  );
+  return NextResponse.json(consignment);
+});
 
-    const consignment = await prisma.consignment.findUnique({
-      where: { id },
-      include: {
-        trader: true,
-        consignee: {
-          include: {
-            vendor: true,
-          },
-        },
+// Body keys that change what the consignment posts to vendor ledgers.
+const LEDGER_KEYS = [
+  "consignee",
+  "consigneeAmount",
+  "airwayBill",
+  "customClearance",
+  "packing",
+  "recoveryDone",
+];
+const touchesLedger = (body) =>
+  LEDGER_KEYS.some((key) => body[key] !== undefined || body[`${key}Id`] !== undefined);
 
-        airwayBill: {
-          include: {
-            iataAgent: {
-              include: { vendor: true },
-            },
-          },
-        },
-        goodsDeclaration: true,
-        customClearance: {
-          include: {
-            customAgent: {
-              include: { vendor: true },
-            },
-          },
-        },
-        packing: {
-          include: {
-            packer: {
-              include: { vendor: true },
-            },
-          },
-        },
-        recoveryDone: true,
-        goods: {
-          include: {
-            commodityItem: true,
-            packaging: true,
-          },
-        },
-      },
-    });
+// PUT - Partial update: only the fields present in the body change.
+// Ledger entries for the consignment are re-posted to match.
+export const PUT = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  const [current, body] = await Promise.all([
+    findOwned(prisma.consignment, id, ownedBy(user)),
+    req.json(),
+  ]);
+  // Linked records are checked before the transaction, all at once.
+  const data = await consignmentData(prisma, body, user, current);
 
-    if (!consignment) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(consignment);
-  } catch (err) {
-    console.error("GET Consignment error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch consignment" },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT - Update consignment and nested goods
-export async function PUT(req, { params }) {
-  try {
-    let { id } = await params;
-    id = Number(id);
-    const body = await req.json();
-
-    // Update consignment main fields
+  // Saving the trader, date or goods declaration doesn't change any ledger.
+  if (!touchesLedger(body)) {
     const updated = await prisma.consignment.update({
       where: { id },
-      data: {
-        date: new Date(body.date),
-        status: body.status,
-        localInvoiceWeight: body.localInvoiceWeight,
-        dailyExpenses: Number(body.dailyExpenses),
-        trader: body.trader?.id
-          ? { connect: { id: body.trader.id } }
-          : undefined,
-        consignee: body.consignee?.id
-          ? { connect: { id: body.consignee.id } }
-          : undefined,
-        airwayBill: body.airwayBill?.id
-          ? { connect: { id: body.airwayBill.id } }
-          : undefined,
-        goodsDeclaration: body.goodsDeclaration?.id
-          ? { connect: { id: body.goodsDeclaration.id } }
-          : undefined,
-        customClearance: body.customClearance?.id
-          ? { connect: { id: body.customClearance.id } }
-          : undefined,
-        packing: body.packing?.id
-          ? { connect: { id: body.packing.id } }
-          : undefined,
-        recoveryDone: body.recoveryDone?.id
-          ? { connect: { id: body.recoveryDone.id } }
-          : undefined,
-      },
+      data,
+      include: CONSIGNMENT_INCLUDE,
     });
+    return NextResponse.json(updated);
+  }
 
-    // Delete existing goods
-    await prisma.consignmentItem.deleteMany({ where: { consignmentId: id } });
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.consignment.update({ where: { id }, data });
+    await syncConsignmentLedger(tx, id, user.id);
+    return tx.consignment.findUnique({
+      where: { id },
+      include: CONSIGNMENT_INCLUDE,
+    });
+  }, TX_OPTIONS);
 
-    // Create updated goods
-    if (Array.isArray(body.goods)) {
-      await prisma.consignmentItem.createMany({
-        data: body.goods.map((g) => ({
-          consignmentId: id,
-          commodityItemId: g.commodityItem.id,
-          packagingId: g.packaging.id,
-          weightPerUnit: g.weightPerUnit,
-          commodityPerUnitCost: g.commodityPerUnitCost,
-          packagingPerUnitCost: g.packagingPerUnitCost,
-          quantity: g.quantity,
-          damage: g.damage,
-        })),
+  return NextResponse.json(updated);
+});
+
+// Deletes `model` row `id` if no other consignment still points at it.
+async function deleteIfUnused(tx, model, foreignKey, id) {
+  if (!id) return;
+  const stillUsed = await tx.consignment.count({ where: { [foreignKey]: id } });
+  if (!stillUsed) await tx[model].delete({ where: { id } });
+}
+
+// DELETE - Delete consignment, its items, its ledger entries and its
+// per-consignment records (airway bill, clearance, packing, recovery, GD).
+export const DELETE = withUser(async (req, { user, params }) => {
+  const id = parseId(params.id);
+  const consignment = await findOwned(prisma.consignment, id, ownedBy(user));
+
+  await prisma.$transaction(async (tx) => {
+    await removeConsignmentLedger(tx, id);
+    await tx.consignmentItem.deleteMany({ where: { consignmentId: id } });
+    await tx.consignment.delete({ where: { id } });
+
+    await deleteIfUnused(tx, "airwayBill", "airwayBillId", consignment.airwayBillId);
+    await deleteIfUnused(tx, "customClearance", "customClearanceId", consignment.customClearanceId);
+    await deleteIfUnused(tx, "packing", "packingId", consignment.packingId);
+    await deleteIfUnused(tx, "recoveryDone", "recoveryDoneId", consignment.recoveryDoneId);
+
+    const gdId = consignment.goodsDeclarationId;
+    if (gdId && !(await tx.consignment.count({ where: { goodsDeclarationId: gdId } }))) {
+      // Give the utilized amounts back to their financial instruments.
+      const utilizations = await tx.financialInstrumentUtilization.findMany({
+        where: { goodsDeclarationId: gdId },
       });
+      for (const u of utilizations) {
+        await tx.financialInstrument.update({
+          where: { id: u.financialInstrumentId },
+          data: { balance: { increment: u.utilized } },
+        });
+      }
+      await tx.financialInstrumentUtilization.deleteMany({
+        where: { goodsDeclarationId: gdId },
+      });
+      await tx.goodsDeclaration.delete({ where: { id: gdId } });
     }
+  }, TX_OPTIONS);
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("PUT Consignment error:", err);
-    return NextResponse.json(
-      { error: "Failed to update consignment" },
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE - Delete consignment and related items
-export async function DELETE(_, { params }) {
-  try {
-    let { id } = await params;
-    id = Number(id);
-
-    // Delete related goods
-    await prisma.consignmentItem.deleteMany({ where: { consignmentId: id } });
-
-    // Delete consignment
-    await prisma.consignment.delete({ where: { id } });
-
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("DELETE Consignment error:", err);
-    return NextResponse.json(
-      { error: "Failed to delete consignment" },
-      { status: 500 }
-    );
-  }
-}
+  return NextResponse.json({ success: true });
+}, { can: "delete" });

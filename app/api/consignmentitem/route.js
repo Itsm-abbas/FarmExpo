@@ -1,77 +1,43 @@
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
+import { consignmentItemData } from "@lib/consignments";
+import {
+  HttpError,
+  findOwned,
+  ownedBy,
+  parseId,
+  withUser,
+} from "@lib/session";
 
-export async function POST(req) {
-  try {
-    // console.log(await req.json());
-    const {
-      commodityItem, // expects { id: number }
-      packaging, // expects { id: number }
-      quantity,
-      weightPerUnit,
-      commodityPerUnitCost,
-      packagingPerUnitCost,
-      damage,
-      consignmentId, // ✅ this must be passed explicitly
-    } = await req.json();
-    console.log();
-    if (!commodityItem?.id || !packaging?.id || !consignmentId) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
+const ITEM_INCLUDE = { commodityItem: true, packaging: true };
 
-    const savedItem = await prisma.consignmentItem.create({
-      data: {
-        commodityItemId: commodityItem.id,
-        packagingId: packaging.id,
-        consignmentId: Number(consignmentId),
-        quantity,
-        weightPerUnit,
-        commodityPerUnitCost,
-        packagingPerUnitCost,
-        damage,
-      },
-      include: {
-        commodityItem: true,
-        packaging: true,
-      },
-    });
+export const POST = withUser(async (req, { user }) => {
+  const body = await req.json();
+  if (!body.consignmentId) throw new HttpError(400, "Missing consignmentId");
+  const consignmentId = parseId(body.consignmentId);
+  const [, data] = await Promise.all([
+    findOwned(prisma.consignment, consignmentId, ownedBy(user)),
+    consignmentItemData(prisma, body, user, { partial: false }),
+  ]);
+  const savedItem = await prisma.consignmentItem.create({
+    data: { damage: 0, ...data, consignmentId },
+    include: ITEM_INCLUDE,
+  });
 
-    return NextResponse.json(savedItem);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "Failed to create item" },
-      { status: 500 }
-    );
-  }
-}
-export async function GET(req) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const consignmentId = searchParams.get("consignmentId");
+  return NextResponse.json(savedItem);
+});
 
-    const whereClause = consignmentId
-      ? { consignmentId: Number(consignmentId) }
-      : {};
+export const GET = withUser(async (req, { user }) => {
+  const consignmentId = new URL(req.url).searchParams.get("consignmentId");
 
-    const items = await prisma.consignmentItem.findMany({
-      where: whereClause,
-      include: {
-        commodityItem: true,
-        packaging: true,
-      },
-      orderBy: { id: "desc" },
-    });
+  const items = await prisma.consignmentItem.findMany({
+    where: {
+      consignment: ownedBy(user),
+      ...(consignmentId ? { consignmentId: parseId(consignmentId) } : {}),
+    },
+    include: ITEM_INCLUDE,
+    orderBy: { id: "desc" },
+  });
 
-    return NextResponse.json(items);
-  } catch (error) {
-    console.error("GET Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch consignment items" },
-      { status: 500 }
-    );
-  }
-}
+  return NextResponse.json(items);
+});

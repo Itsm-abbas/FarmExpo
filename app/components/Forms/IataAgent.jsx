@@ -1,5 +1,7 @@
 "use client";
 
+import useSession from "@hooks/useSession";
+import { CurrencySelect, Field } from "@components/Page";
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Swal from "sweetalert2";
@@ -34,7 +36,18 @@ export default function IataAgent() {
     balance: 0,
     currency: "",
   });
-  const [loading, setLoading] = useState(false);
+  // An existing record shows the loader until its saved values are in.
+  const [loading, setLoading] = useState(Boolean(id));
+  const { currency: baseCurrency } = useSession();
+
+  // New partners start in the organization's currency.
+  useEffect(() => {
+    if (!id && baseCurrency) {
+      setFormData((prev) =>
+        prev.currency ? prev : { ...prev, currency: baseCurrency }
+      );
+    }
+  }, [id, baseCurrency]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -45,7 +58,11 @@ export default function IataAgent() {
           const response = await axiosInstance.get(`/iata-agent/${id}`);
           const { data } = response;
           if (data) {
-            setFormData(data.vendor);
+            // "Initial Balance" edits the opening balance; the running balance is the ledger's.
+            setFormData({
+              ...data.vendor,
+              balance: data.vendor.openingBalance ?? 0,
+            });
           } else {
             Swal.fire({
               icon: "warning",
@@ -329,22 +346,21 @@ export default function IataAgent() {
                   })
                 }
                 placeholder="Enter initial balance"
-                label="Initial Balance"
+                label={`Opening balance (${formData.currency || baseCurrency})`}
                 disabled={isSubmitting}
               />
 
-              <Input
-                id="currency"
-                type="text"
-                value={formData.currency}
-                onChange={(e) =>
-                  setFormData({ ...formData, currency: e.target.value })
-                }
-                placeholder="e.g., USD, EUR, PKR"
-                label="Currency"
-                disabled={isSubmitting}
-                required
-              />
+              <Field label="Currency *" htmlFor="currency">
+                  <CurrencySelect
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) =>
+                      setFormData({ ...formData, currency: e.target.value })
+                    }
+                    disabled={isSubmitting}
+                    required
+                  />
+                </Field>
             </div>
           </div>
 

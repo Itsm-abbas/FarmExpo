@@ -1,5 +1,7 @@
 "use client";
 
+import useSession from "@hooks/useSession";
+import { formatMoney } from "@utils/money";
 import UpdateConsignment from "@utils/updateConsignment";
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
@@ -28,6 +30,10 @@ export default function GoodsDeclarationForm({
   isLocked = false,
 }) {
   const token = getCookie("token");
+  const { currency: baseCurrency } = useSession();
+  // FOB, freight and realizations are in the export invoice currency.
+  const invoiceCurrency =
+    formStatus?.consignee?.vendor?.currency || "foreign currency";
   const [formData, setFormData] = useState({
     number: "",
     date: "",
@@ -289,7 +295,7 @@ export default function GoodsDeclarationForm({
                 <Input
                   type="number"
                   step="0.01"
-                  label="Exchange Rate"
+                  label={`Exchange rate (${baseCurrency} per 1 ${formStatus?.consignee?.vendor?.currency || "unit"})`}
                   value={formData.exchangeRate}
                   onChange={(e) =>
                     handleInputChange("exchangeRate", e.target.value)
@@ -318,7 +324,7 @@ export default function GoodsDeclarationForm({
                 <Input
                   type="number"
                   step="0.01"
-                  label="FOB Value"
+                  label={`FOB value (${invoiceCurrency})`}
                   value={formData.fob}
                   onChange={(e) => handleInputChange("fob", e.target.value)}
                   placeholder="Enter FOB value"
@@ -330,7 +336,7 @@ export default function GoodsDeclarationForm({
                 <Input
                   type="number"
                   step="0.01"
-                  label="GD Freight"
+                  label={`GD freight (${invoiceCurrency})`}
                   value={formData.gdFreight}
                   onChange={(e) =>
                     handleInputChange("gdFreight", e.target.value)
@@ -352,7 +358,7 @@ export default function GoodsDeclarationForm({
                       Total Declared Value
                     </h4>
                     <p className="text-2xl font-bold text-text">
-                      ${totalValue.toFixed(2)}
+                      {formatMoney(totalValue, formStatus?.consignee?.vendor?.currency, { decimals: 2 })}
                     </p>
                     <p className="text-xs text-text/60 mt-1">
                       FOB + GD Freight
@@ -375,7 +381,7 @@ export default function GoodsDeclarationForm({
                     <Input
                       type="number"
                       step="0.01"
-                      label={label}
+                      label={`${label} (${invoiceCurrency})`}
                       placeholder={`Enter ${label} value`}
                       value={formData[key]}
                       onChange={(e) => handleInputChange(key, e.target.value)}

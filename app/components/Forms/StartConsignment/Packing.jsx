@@ -1,5 +1,6 @@
 "use client";
 
+import useSession from "@hooks/useSession";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
@@ -30,6 +31,7 @@ const Packing = ({
   isLocked = false,
 }) => {
   const router = useRouter();
+  const { currency: baseCurrency } = useSession();
   const token = getCookie("token");
   const [ratePerKg, setRatePerKg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -307,7 +309,7 @@ const Packing = ({
             >
               <FaDollarSign className="text-primary text-sm" />
               <span>
-                Rate per Kg *{" "}
+                Rate per kg ({selectedPacker?.vendor?.currency || baseCurrency}) *{" "}
                 {isLocked && (
                   <span className="text-red-500 text-xs">(Locked)</span>
                 )}
@@ -345,7 +347,7 @@ const Packing = ({
                 <div className="flex justify-between">
                   <span className="text-text/70">Rate:</span>
                   <span className="font-medium text-text">
-                    {selectedPacker?.vendor?.currency || "USD"} {ratePerKg} per
+                    {selectedPacker?.vendor?.currency || baseCurrency} {ratePerKg} per
                     kg
                   </span>
                 </div>
@@ -353,7 +355,7 @@ const Packing = ({
                   <div className="flex justify-between text-lg font-bold">
                     <span className="text-text">Total Packing Cost:</span>
                     <span className="text-green-500">
-                      {selectedPacker?.vendor?.currency || "USD"}{" "}
+                      {selectedPacker?.vendor?.currency || baseCurrency}{" "}
                       {totalPackingCost.toLocaleString()}
                     </span>
                   </div>

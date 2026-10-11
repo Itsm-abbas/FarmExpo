@@ -7,12 +7,16 @@ export default {
   ],
   theme: {
     extend: {
+      // All colors come from CSS variables set by utils/theme.js.
       colors: {
         text: "rgb(var(--color-text) / <alpha-value>)",
         background: "rgb(var(--color-background) / <alpha-value>)",
+        surface: "rgb(var(--color-surface) / <alpha-value>)",
         primary: "rgb(var(--color-primary) / <alpha-value>)",
         secondary: "rgb(var(--color-secondary) / <alpha-value>)",
         accent: "rgb(var(--color-accent) / <alpha-value>)",
+        // Sparing emphasis (pending work, attention), e.g. mango in Orchard.
+        highlight: "rgb(var(--color-highlight) / <alpha-value>)",
 
         // New interactive + selection colors
         hover: "rgb(var(--color-hover) / <alpha-value>)",
@@ -21,8 +25,11 @@ export default {
       },
 
       fontFamily: {
-        poppins: "var(--font-poppins)",
-        inter: "var(--font-inter)",
+        display: "var(--font-display)",
+        body: "var(--font-body)",
+        // Older class names, kept so existing pages pick up the new faces.
+        poppins: "var(--font-display)",
+        inter: "var(--font-body)",
       },
     },
   },

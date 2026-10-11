@@ -1,5 +1,8 @@
 "use client";
 
+import useSession from "@hooks/useSession";
+import { formatMoney } from "@utils/money";
+import { CurrencySelect, Field } from "@components/Page";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
@@ -22,8 +25,12 @@ export default function RecoveryDoneForm({
   existingData,
   setFormStatuses,
   setActiveAccordion,
+  formStatus,
   isLocked = false,
 }) {
+  const { currency: baseCurrency } = useSession();
+  // Recoveries are usually in the consignee's currency.
+  const consigneeCurrency = formStatus?.consignee?.vendor?.currency;
   const [formData, setFormData] = useState({
     amount: "",
     currency: "",
@@ -94,16 +101,15 @@ export default function RecoveryDoneForm({
 
       if (!response.ok) throw new Error(result.error || "Failed to save data");
 
-      await UpdateConsignment(
+      // Links the recovery (posted as a payment on the consignee's ledger)
+      // and marks the consignment fulfilled.
+      const updated = await UpdateConsignment(
         consignmentId,
-        { recoveryDone: { id: result.id, ...formData } },
+        { recoveryDone: { id: result.id } },
         "Fulfilled"
       );
 
-      setFormStatuses((prev) => ({
-        ...prev,
-        recoveryDone: { id: result.id, ...formData },
-      }));
+      setFormStatuses(updated);
       setActiveAccordion(null);
 
       MySwal.fire({
@@ -139,8 +145,12 @@ export default function RecoveryDoneForm({
   useEffect(() => {
     if (existingData) {
       setFormData(existingData);
+    } else if (consigneeCurrency) {
+      setFormData((prev) =>
+        prev.currency ? prev : { ...prev, currency: consigneeCurrency }
+      );
     }
-  }, [existingData]);
+  }, [existingData, consigneeCurrency]);
 
   const InputField = ({
     id,
@@ -208,7 +218,7 @@ export default function RecoveryDoneForm({
           <div className="space-y-4">
             <Input
               id="amount"
-              label="Recovery Amount *"
+              label={`Amount recovered (${formData.currency || "currency"}) *`}
               value={formData.amount}
               onChange={(e) =>
                 setFormData({ ...formData, amount: e.target.value })
@@ -219,20 +229,31 @@ export default function RecoveryDoneForm({
               min="0"
             />
 
-            <Input
-              id="currency"
-              label="Currency *"
-              value={formData.currency}
-              onChange={(e) =>
-                setFormData({ ...formData, currency: e.target.value })
-              }
-              placeholder="Enter currency (e.g., USD, EUR)"
-              icon={FaMoneyBillWave}
-            />
+            <Field label="Currency *" htmlFor="currency">
+              <CurrencySelect
+                id="currency"
+                value={formData.currency}
+                disabled={isLocked}
+                onChange={(e) =>
+                  setFormData({ ...formData, currency: e.target.value })
+                }
+              />
+            </Field>
+            {consigneeCurrency &&
+              formData.currency &&
+              formData.currency !== consigneeCurrency &&
+              consigneeCurrency !== baseCurrency && (
+                <p role="status" className="rounded-lg bg-highlight/15 px-3 py-2 text-sm text-text">
+                  This recovery is in {formData.currency}, but the
+                  consignee&apos;s ledger is kept in {consigneeCurrency}. It will
+                  show on the invoice but won&apos;t be posted to their ledger.
+                  Enter it in {consigneeCurrency} to have it posted.
+                </p>
+              )}
 
             <Input
               id="exchangeRate"
-              label="Exchange Rate *"
+              label={`Exchange rate (${baseCurrency} per 1 ${formData.currency || "unit"}) *`}
               value={formData.exchangeRate}
               onChange={(e) =>
                 setFormData({ ...formData, exchangeRate: e.target.value })
@@ -259,7 +280,7 @@ export default function RecoveryDoneForm({
                 <div className="flex justify-between">
                   <span className="text-text/70">Amount:</span>
                   <span className="font-medium text-text">
-                    {formData.amount} {formData.currency}
+                    {formatMoney(formData.amount, formData.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -272,10 +293,11 @@ export default function RecoveryDoneForm({
                   <div className="flex justify-between text-lg font-bold">
                     <span className="text-text">Converted Amount:</span>
                     <span className="text-green-500">
-                      {(
+                      {formatMoney(
                         parseFloat(formData.amount) *
-                        parseFloat(formData.exchangeRate)
-                      ).toLocaleString()}{" "}
+                          parseFloat(formData.exchangeRate),
+                        baseCurrency
+                      )}
                     </span>
                   </div>
                 </div>

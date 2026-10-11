@@ -21,7 +21,8 @@ export default function Packaging() {
     name: "",
     packagingWeightPerUnit: "",
   });
-  const [loading, setLoading] = useState(false);
+  // An existing record shows the loader until its saved values are in.
+  const [loading, setLoading] = useState(Boolean(id));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function Packaging() {
       const fetchPackaging = async () => {
         setLoading(true);
         try {
-          const response = await axiosInstance.get(`/api/packaging/${id}`);
+          const response = await axiosInstance.get(`/packaging/${id}`);
           const { data } = response;
           setFormData({
             name: data?.name || "",

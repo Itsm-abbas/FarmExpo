@@ -24,7 +24,7 @@ const ViewConsignmentItem = () => {
       await axiosInstance.delete(`/consignmentitem/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["consignmentitem"]);
+      queryClient.invalidateQueries({ queryKey: ["consignmentitem"] });
       Swal.fire({
         position: "top-center",
         icon: "success",

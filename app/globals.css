@@ -2,9 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-.number-font {
-  font-family: 'Roboto Mono', 'Consolas', 'Menlo', monospace;
-  letter-spacing: 0.02em;
+/* Defaults = Orchard light. utils/theme.js replaces these at runtime with the
+   chosen palette or the organization's brand colors. */
+:root {
+  --color-text: 20 35 28;
+  --color-background: 245 247 244;
+  --color-surface: 255 255 255;
+  --color-primary: 31 111 74;
+  --color-secondary: 169 191 174;
+  --color-accent: 22 82 55;
+  --color-highlight: 214 137 26;
+  --color-hover: 40 128 88;
+  --color-active: 24 92 62;
+  --color-selection: 31 111 74 / 0.2;
+}
+
+::selection {
+  background: rgb(var(--color-primary) / 0.25);
+  color: rgb(var(--color-text));
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body), system-ui, sans-serif;
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-text));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  /* Keyboard focus is always visible. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Figures line up in columns of money. */
+  .tabular,
+  .number-font {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 .input {
@@ -13,10 +69,6 @@
 
 .input:focus {
   outline: none;
-}
-
-.input::placeholder {
-  color: white;
 }
 
 /* Loader */
@@ -29,27 +81,12 @@
 }
 
 .loader {
-  width: fit-content;
-  font-weight: bold;
-  font-family: monospace;
-  font-size: 30px;
-  background: radial-gradient(circle closest-side, #10B981 94%, #10ca0a00) right/calc(200% - 1em) 100%;
-  animation: l24 1s infinite alternate linear;
-}
-
-.loader::before {
-  content: "Loading...";
-  line-height: 1em;
-  background: inherit;
-  background-image: radial-gradient(circle closest-side, #fff 94%, #000);
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-
-@keyframes l24 {
-  100% {
-    background-position: left;
-  }
+  width: 40px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid rgb(var(--color-primary) / 0.2);
+  border-top-color: rgb(var(--color-primary));
+  animation: spin 0.8s linear infinite;
 }
 
 /* Data Loader */
@@ -62,28 +99,20 @@
 }
 
 .dataLoader {
-  width: 50px;
-  padding: 8px;
+  width: 32px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #10B981;
-  --_m: conic-gradient(#00ff004d 10%, #00ff00),
-    /* Green conic gradient */
-    linear-gradient(#008000 0 0) content-box;
-  -webkit-mask: var(--_m);
-  mask: var(--_m);
-  -webkit-mask-composite: source-out;
-  mask-composite: subtract;
-  animation: l3 1s infinite linear;
+  border: 3px solid rgb(var(--color-primary) / 0.2);
+  border-top-color: rgb(var(--color-primary));
+  animation: spin 0.8s linear infinite;
 }
 
-@keyframes l3 {
+@keyframes spin {
   to {
     transform: rotate(1turn);
   }
 }
 
-/* Add this to your global CSS */
 @media print {
   table {
     page-break-inside: avoid;
@@ -96,73 +125,5 @@
 
   thead {
     display: table-header-group;
-  }
-}
-
-:root {
-  --font-poppins: "Poppins", sans-serif;
-  --font-inter: "Inter", sans-serif;
-
-  /* Default colors (will be overridden by JavaScript) */
-  --color-text: 235 240 240;
-  --color-background: 6 8 9;
-  --color-primary: 97 140 143;
-  --color-secondary: 255 255 255;
-  --color-accent: 78 126 126;
-}
-
-::selection {
-  background: rgb(var(--color-primary));
-  color: rgb(var(--color-background));
-}
-
-/* Base styles using CSS variables */
-@layer base {
-  :root {
-    --font-inter: 'Inter', sans-serif;
-    --font-poppins: 'Poppins', sans-serif;
-  }
-
-  body {
-    font-family: var(--font-inter);
-  }
-
-  .font-poppins {
-    font-family: var(--font-poppins);
-  }
-
-  .font-inter {
-    font-family: var(--font-inter);
-  }
-}
-
-/* Custom utilities */
-@layer utilities {
-  .text-text {
-    color: rgb(var(--color-text));
-  }
-
-  .bg-background {
-    background-color: rgb(var(--color-background));
-  }
-
-  .bg-primary {
-    background-color: rgb(var(--color-primary));
-  }
-
-  .bg-secondary {
-    background-color: rgb(var(--color-secondary));
-  }
-
-  .bg-accent {
-    background-color: rgb(var(--color-accent));
-  }
-
-  .border-secondary {
-    border-color: rgb(var(--color-secondary));
-  }
-
-  .border-accent {
-    border-color: rgb(var(--color-accent));
   }
 }

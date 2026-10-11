@@ -115,7 +115,11 @@ const Input = ({
           transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {label || placeholder}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {/* Labels that already end in "*" don't get a second one. */}
+          {required &&
+            !String(label || placeholder || "").trim().endsWith("*") && (
+              <span className="text-red-500 ml-1">*</span>
+            )}
         </motion.label>
 
         {/* Left Icon */}

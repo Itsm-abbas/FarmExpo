@@ -1,167 +1,34 @@
 import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
+import { syncConsignmentLedger } from "@lib/ledger";
+import { CONSIGNMENT_INCLUDE, consignmentData } from "@lib/consignments";
+import { HttpError, TX_OPTIONS, ownedBy, stamp, withUser } from "@lib/session";
 
-export async function POST(req) {
-  try {
-    const body = await req.json();
-    console.log("Creating consignment with body:", body);
-    const created = await prisma.consignment.create({
-      data: {
-        date: new Date(body.date),
-        status: body.status,
-        localInvoiceWeight: body.localInvoiceWeight,
-        dailyExpenses: body.dailyExpenses,
-        trader: body.trader?.id
-          ? { connect: { id: body.trader.id } }
-          : undefined,
-        consignee: body.consignee?.vendorId
-          ? { connect: { vendorId: body.consignee.vendorId } }
-          : undefined,
-        airwayBill: body.airwayBill?.id
-          ? { connect: { id: body.airwayBill.id } }
-          : undefined,
-        goodsDeclaration: body.goodsDeclaration?.id
-          ? { connect: { id: body.goodsDeclaration.id } }
-          : undefined,
-        customClearance: body.customClearance?.id
-          ? { connect: { id: body.customClearance.id } }
-          : undefined,
-        packing: body.packing?.id
-          ? { connect: { id: body.packing.id } }
-          : undefined,
-        recoveryDone: body.recoveryDone?.id
-          ? { connect: { id: body.recoveryDone.id } }
-          : undefined,
-        goods: {
-          create: body.goods?.map((g) => ({
-            commodityItem: { connect: { id: g.commodityItem.id } },
-            packaging: { connect: { id: g.packaging.id } },
-            weightPerUnit: g.weightPerUnit,
-            commodityPerUnitCost: g.commodityPerUnitCost,
-            packagingPerUnitCost: g.packagingPerUnitCost,
-            quantity: g.quantity,
-            damage: g.damage,
-          })),
-        },
-      },
-      include: {
-        trader: true,
-        consignee: true,
-        airwayBill: true,
-        goodsDeclaration: true,
-        customClearance: true,
-        packing: true,
-        recoveryDone: true,
-        goods: {
-          include: {
-            commodityItem: true,
-            packaging: true,
-          },
-        },
-      },
+export const POST = withUser(async (req, { user }) => {
+  const body = await req.json();
+  if (!body.date) throw new HttpError(400, "date is required");
+
+  const created = await prisma.$transaction(async (tx) => {
+    const data = await consignmentData(tx, body, user);
+    const consignment = await tx.consignment.create({
+      data: { ...data, ...stamp(user) },
     });
+    await syncConsignmentLedger(tx, consignment.id, user.id);
+    return tx.consignment.findUnique({
+      where: { id: consignment.id },
+      include: CONSIGNMENT_INCLUDE,
+    });
+  }, TX_OPTIONS);
 
-    return NextResponse.json(created);
-  } catch (err) {
-    console.error("Error creating consignment:", err);
-    return NextResponse.json(
-      { error: "Failed to create consignment" },
-      { status: 500 }
-    );
-  }
-}
-// export async function POST(req) {
-//   try {
-//     const {
-//       traderId,
-//       consigneeId,
-//       airwayBillId,
-//       goodsDeclarationId,
-//       customClearanceId,
-//       packingId,
-//       recoveryDoneId,
-//       localInvoiceWeight,
-//       dailyExpenses,
-//       status,
-//       date,
-//     } = await req.json();
+  return NextResponse.json(created);
+});
 
-//     const consignment = await prisma.consignment.create({
-//       data: {
-//         traderId,
-//         consigneeId,
-//         airwayBillId,
-//         goodsDeclarationId,
-//         customClearanceId,
-//         packingId,
-//         recoveryDoneId,
-//         localInvoiceWeight,
-//         dailyExpenses,
-//         status,
-//         date: new Date(date),
-//       },
-//       include: {
-//         trader: true,
-//         consignee: {
-//           include: { vendor: true },
-//         },
-//         airwayBill: {
-//           include: { iataAgent: { include: { vendor: true } } },
-//         },
-//         goodsDeclaration: true,
-//         customClearance: {
-//           include: { customAgent: { include: { vendor: true } } },
-//         },
-//         packing: {
-//           include: { packer: { include: { vendor: true } } },
-//         },
-//         recoveryDone: true,
-//         goods: {
-//           include: {
-//             commodityItem: true,
-//             packaging: true,
-//           },
-//         },
-//       },
-//     });
-
-//     return NextResponse.json(consignment);
-//   } catch (error) {
-//     console.error(error);
-//     return NextResponse.json(
-//       { error: "Failed to create consignment" },
-//       { status: 500 }
-//     );
-//   }
-// }
-
-export async function GET() {
+export const GET = withUser(async (req, { user }) => {
   const consignments = await prisma.consignment.findMany({
+    where: ownedBy(user),
     orderBy: { createdAt: "desc" },
-    include: {
-      trader: true,
-      consignee: {
-        include: { vendor: true },
-      },
-      airwayBill: {
-        include: { iataAgent: { include: { vendor: true } } },
-      },
-      goodsDeclaration: true,
-      customClearance: {
-        include: { customAgent: { include: { vendor: true } } },
-      },
-      packing: {
-        include: { packer: { include: { vendor: true } } },
-      },
-      recoveryDone: true,
-      goods: {
-        include: {
-          commodityItem: true,
-          packaging: true,
-        },
-      },
-    },
+    include: CONSIGNMENT_INCLUDE,
   });
 
   return NextResponse.json(consignments);
-}
+});

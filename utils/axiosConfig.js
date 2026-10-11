@@ -1,8 +1,6 @@
 import axios from "axios";
-import { getCookie } from "cookies-next";
+import { deleteCookie, getCookie } from "cookies-next";
 import Swal from "sweetalert2";
-
-const token = getCookie("token");
 
 const axiosInstance = axios.create({
   baseURL: "/api",
@@ -12,6 +10,9 @@ const axiosInstance = axios.create({
 // Add request interceptors
 axiosInstance.interceptors.request.use(
   (config) => {
+    // Read the token on every request: reading it once at import time kept
+    // sending the previous user's token after logging in as someone else.
+    const token = getCookie("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -27,6 +28,9 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Drop the stale cookie, otherwise the middleware sends /auth/login
+      // straight back to "/" and the user is stuck in a loop.
+      deleteCookie("token");
       Swal.fire({
         icon: "warning",
         title: "Session Expired",
@@ -35,6 +39,10 @@ axiosInstance.interceptors.response.use(
       }).then(() => {
         window.location.href = "/auth/login"; // Redirect after user acknowledges alert
       });
+    }
+    // Surface the API's own error message (e.g. "Insufficient balance").
+    if (error.response?.data?.error && typeof error.response.data.error === "string") {
+      error.message = error.response.data.error;
     }
     return Promise.reject(error);
   }

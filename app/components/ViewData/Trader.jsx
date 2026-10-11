@@ -1,4 +1,5 @@
 //components/ViewData/Trader.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchTraders } from "@constants/consignmentAPI";
@@ -11,6 +12,8 @@ import { motion } from "framer-motion";
 
 const ViewTrader = () => {
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
   const router = useRouter();
 
   const { isLoading, data } = useQuery({
@@ -23,7 +26,7 @@ const ViewTrader = () => {
       await axiosInstance.delete(`/trader/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["traders"]);
+      queryClient.invalidateQueries({ queryKey: ["traders"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -172,7 +175,7 @@ const ViewTrader = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No trading partners found. Add your first trader to get started."
         addButton={

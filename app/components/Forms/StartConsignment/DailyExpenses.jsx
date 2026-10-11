@@ -1,4 +1,6 @@
 "use client";
+import useSession from "@hooks/useSession";
+import { formatMoney } from "@utils/money";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
@@ -18,6 +20,7 @@ const DailyExpenses = ({
   isLocked = false,
 }) => {
   const [dailyExpenses, setDailyExpenses] = useState("");
+  const { currency } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -72,9 +75,7 @@ const DailyExpenses = ({
       MySwal.fire({
         icon: "success",
         title: "Success!",
-        text: `Daily expenses of ${expenseAmount.toFixed(
-          2
-        )} added successfully.`,
+        text: `Daily expenses of ${formatMoney(expenseAmount, currency, { decimals: 2 })} saved.`,
         showConfirmButton: false,
         timer: 2000,
         background: "rgb(var(--color-background))",
@@ -145,7 +146,7 @@ const DailyExpenses = ({
               value={dailyExpenses}
               onChange={(e) => setDailyExpenses(e.target.value)}
               placeholder="Enter daily expense amount"
-              label="Daily Expense Amount *"
+              label={`Daily expenses (${currency}) *`}
               disabled={isLocked}
               min="0"
               step="0.01"

@@ -1,4 +1,5 @@
 //components/ViewData/iataagent.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchIata } from "@constants/consignmentAPI";
@@ -11,10 +12,12 @@ import { motion } from "framer-motion";
 
 const ViewIataAgent = () => {
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
   const router = useRouter();
 
   const { isLoading, data } = useQuery({
-    queryKey: ["iataagents"],
+    queryKey: ["iataAgents"],
     queryFn: fetchIata,
   });
 
@@ -23,7 +26,7 @@ const ViewIataAgent = () => {
       await axiosInstance.delete(`/iata-agent/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["iataagents"]);
+      queryClient.invalidateQueries({ queryKey: ["iataAgents"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -83,6 +86,7 @@ const ViewIataAgent = () => {
       label: "Balance",
       accessor: "vendor.balance",
       format: "currency",
+      currencyAccessor: "vendor.currency",
     },
     { key: "currency", label: "Currency", accessor: "vendor.currency" },
     { key: "actions", label: "Actions" },
@@ -100,7 +104,7 @@ const ViewIataAgent = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No IATA agents found. Add your first IATA certified agent to get started."
         addButton={

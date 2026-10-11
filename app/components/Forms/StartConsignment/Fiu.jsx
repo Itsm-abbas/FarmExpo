@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMoney } from "@utils/money";
 import SaveButton from "@components/Button/SaveButton";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
@@ -28,7 +29,7 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
   const [error, setError] = useState("");
 
   const { data: FiData = [], isLoading: FiLoading } = useQuery({
-    queryKey: ["financialinstrument"],
+    queryKey: ["financialInstruments"],
     queryFn: fetchFinancialInstrument,
   });
 
@@ -97,8 +98,8 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
         color: "rgb(var(--color-text))",
         iconColor: "rgb(var(--color-primary))",
       });
-      queryClient.invalidateQueries(["financialinstrument"]);
-      queryClient.invalidateQueries(["utilization"]);
+      queryClient.invalidateQueries({ queryKey: ["financialInstruments"] });
+      queryClient.invalidateQueries({ queryKey: ["utilization"] });
     },
     onError: (err) => {
       setError(err?.response?.data?.error || err.message);
@@ -324,7 +325,7 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
                             }
                             className="text-text bg-background"
                           >
-                            {fi.number} - Balance: {fi.balance} ({fi.currency})
+                            {fi.number}, balance {formatMoney(fi.balance, fi.currency)}
                           </option>
                         ))}
                         <option
@@ -353,14 +354,14 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
                         onChange={(e) =>
                           handleUtilizedChange(index, e.target.value)
                         }
-                        label="Utilized Amount *"
+                        label={`Utilized amount${util.instrument?.currency ? ` (${util.instrument.currency})` : ""} *`}
                         disabled={isLocked}
                         min="0"
                         step="0.01"
                         icon={FaMoneyBill}
                         helpertext={
                           util.instrument
-                            ? `Available: ${util.instrument.balance}`
+                            ? `Available: ${formatMoney(util.instrument.balance, util.instrument.currency)}`
                             : ""
                         }
                       />
@@ -405,7 +406,7 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
           <div className="flex flex-col  gap-4 pt-4 border-t border-primary/10">
             <SaveButton
               handleSubmit={handleSubmit}
-              isLoading={mutation.isLoading}
+              isLoading={mutation.isPending}
               disabled={isLocked}
             />
 

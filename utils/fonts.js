@@ -1,15 +1,15 @@
-import { Poppins, Inter } from "next/font/google";
+import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 
-export const poppins = Poppins({
+// Display: headings, figures and the brand. Body: everything you read and type.
+export const display = Bricolage_Grotesque({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-poppins",
+  variable: "--font-display",
   display: "swap",
+  axes: ["opsz"],
 });
 
-export const inter = Inter({
+export const body = Instrument_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
+  variable: "--font-body",
   display: "swap",
 });

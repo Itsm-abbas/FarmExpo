@@ -1,5 +1,7 @@
 "use client";
 
+import useSession from "@hooks/useSession";
+import { formatMoney } from "@utils/money";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Swal from "sweetalert2";
@@ -7,7 +9,6 @@ import DataLoader from "@components/Loader/dataLoader";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Input from "@components/Input";
-import { getCookie } from "cookies-next";
 import {
   FaArrowRight,
   FaEdit,
@@ -20,15 +21,18 @@ import {
   FaSearch,
   FaFilter,
 } from "react-icons/fa";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import axiosInstance from "@utils/axiosConfig";
 import {
-  fetchConsignmentById,
-  fetchConsignments,
-} from "@constants/consignmentAPI";
+  listQueries,
+  markConsignmentChanged,
+  queryKeys,
+  useConsignment,
+} from "@hooks/queries";
 
 export default function ItemSelectionPage() {
   const router = useRouter();
-  const token = getCookie("token");
+  const { currency } = useSession();
   const { id } = useParams();
   const [submitLoading, setSubmitLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState({});
@@ -48,52 +52,35 @@ export default function ItemSelectionPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSelected, setFilterSelected] = useState("all"); // "all", "selected", "unselected"
 
+  const queryClient = useQueryClient();
   const {
     data: items = [],
     isLoading: isLoadingCommodities,
     error: commoditiesError,
-  } = useQuery({
-    queryKey: ["commodities"],
-    queryFn: async () => {
-      const res = await fetch(`/api/commodity`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch commodities");
-      return res.json();
-    },
-  });
+  } = useQuery(listQueries.commodities);
 
   const {
     data: packagingOptions = [],
     isLoading: isLoadingPackaging,
     error: packagingError,
-  } = useQuery({
-    queryKey: ["packaging"],
-    queryFn: async () => {
-      const res = await fetch(`/api/packaging`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch packaging");
-      return res.json();
-    },
-  });
+  } = useQuery(listQueries.packaging);
 
+  // The same cached consignment the consignment page uses.
   const {
+    data: consignment,
     isLoading: isLoadingGoods,
-    data: goods,
-    refetch,
     error: consignmentError,
-  } = useQuery({
-    queryKey: ["consignments", id],
-    queryFn: () => fetchConsignmentById(id),
-    select: (data) => data?.goods || [],
-  });
+  } = useConsignment(id);
+  const goods = consignment?.goods;
+
+  // Applies a saved or deleted item to the cached consignment, instead of
+  // fetching the whole consignment again.
+  const updateGoods = (update) => {
+    queryClient.setQueryData(queryKeys.consignment(id), (prev) =>
+      prev ? { ...prev, goods: update(prev.goods || []) } : prev
+    );
+    markConsignmentChanged(queryClient);
+  };
 
   useEffect(() => {
     if (!goods) return;
@@ -220,45 +207,8 @@ export default function ItemSelectionPage() {
 
     if (result.isConfirmed) {
       try {
-        const deleteResponse = await fetch(`/api/consignmentitem/${detailId}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!deleteResponse.ok) throw new Error("Failed to delete item");
-
-        const response = await fetch(`/api/consignment/${id}`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok)
-          throw new Error("Failed to fetch updated consignment");
-
-        const updatedConsignment = await response.json();
-
-        const existingItems = updatedConsignment.goods?.reduce((acc, good) => {
-          if (!acc[good.commodityItem.id]) {
-            acc[good.commodityItem.id] = [];
-          }
-          acc[good.commodityItem.id].push({
-            id: good.id,
-            quantity: good.quantity,
-            weightPerUnit: good.weightPerUnit,
-            commodityPerUnitCost: good.commodityPerUnitCost,
-            packagingPerUnitCost: good.packagingPerUnitCost,
-            packaging: good.packaging,
-            damage: good.damage,
-          });
-          return acc;
-        }, {});
-
-        setSelectedItems(existingItems || {});
+        await axiosInstance.delete(`/consignmentitem/${detailId}`);
+        updateGoods((list) => list.filter((good) => good.id !== detailId));
 
         Swal.fire({
           position: "top-center",
@@ -274,7 +224,6 @@ export default function ItemSelectionPage() {
   };
 
   const handleItemDetail = async () => {
-    refetch();
     if (currentItem) {
       setSubmitLoading(true);
       try {
@@ -288,85 +237,25 @@ export default function ItemSelectionPage() {
           packagingPerUnitCost:
             parseFloat(itemDetail.packagingPerUnitCost) || 0,
           packaging: itemDetail.packaging,
-          damage: 0,
+          // `damage` is left out so editing an item keeps its recorded damage.
         };
-
-        const consignmentRes = await fetch(`/api/consignment/${id}`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!consignmentRes.ok) throw new Error("Failed to fetch consignment");
-        const consignmentData = await consignmentRes.json();
 
         let existingItemId = null;
         if (currentDetailIndex !== null) {
           existingItemId = selectedItems[currentItem.id][currentDetailIndex].id;
         }
 
-        const method = existingItemId ? "PUT" : "POST";
-        const url = existingItemId
-          ? `/api/consignmentitem/${existingItemId}`
-          : `/api/consignmentitem`;
+        // One request: the saved item comes back with its commodity and
+        // packaging, and is put straight into the cached consignment.
+        const { data: savedItem } = existingItemId
+          ? await axiosInstance.put(`/consignmentitem/${existingItemId}`, itemData)
+          : await axiosInstance.post(`/consignmentitem`, itemData);
 
-        const itemResponse = await fetch(url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(itemData),
-        });
-
-        if (!itemResponse.ok) throw new Error("Failed to save item");
-        const savedItem = await itemResponse.json();
-
-        if (!savedItem?.commodityItem?.id || !savedItem?.packaging?.id) {
-          throw new Error("Invalid item data returned from server");
-        }
-
-        const fetchConsignment = async () => {
-          const response = await fetch(`/api/consignment/${id}`, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to fetch consignment data.");
-          }
-          return await response.json();
-        };
-
-        const fetchData = async () => {
-          try {
-            const [consignmentData] = await Promise.all([fetchConsignment()]);
-            const existingItems = consignmentData.goods?.reduce((acc, good) => {
-              if (!acc[good.commodityItem.id]) {
-                acc[good.commodityItem.id] = [];
-              }
-              acc[good.commodityItem.id].push({
-                id: good.id,
-                quantity: good.quantity,
-                weightPerUnit: good.weightPerUnit,
-                commodityPerUnitCost: good.commodityPerUnitCost,
-                packagingPerUnitCost: good.packagingPerUnitCost,
-                packaging: good.packaging,
-                damage: good.damage,
-              });
-              return acc;
-            }, {});
-
-            setSelectedItems(existingItems || {});
-          } catch (error) {
-            Swal.fire({ icon: "error", title: "Error", text: error.message });
-          }
-        };
-
-        fetchData();
+        updateGoods((list) =>
+          existingItemId
+            ? list.map((good) => (good.id === savedItem.id ? { ...good, ...savedItem } : good))
+            : [...list, savedItem]
+        );
 
         Swal.fire({
           position: "top-center",
@@ -696,7 +585,7 @@ export default function ItemSelectionPage() {
                             Weight/Unit
                           </th>
                           <th className="px-4 py-3 text-left text-text font-semibold text-sm">
-                            Cost/Unit
+                            Cost / kg
                           </th>
                           <th className="px-4 py-3 text-left text-text font-semibold text-sm">
                             Packaging
@@ -723,7 +612,7 @@ export default function ItemSelectionPage() {
                                 {detail.weightPerUnit} kg
                               </td>
                               <td className="px-4 py-3 text-text">
-                                ${detail.commodityPerUnitCost}
+                                {formatMoney(detail.commodityPerUnitCost, currency)}
                               </td>
                               <td className="px-4 py-3 text-text">
                                 {detail.packaging?.name || "N/A"}
@@ -870,7 +759,7 @@ export default function ItemSelectionPage() {
                   <div>
                     <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
                       <FaMoneyBill className="text-primary/60" />
-                      Cost Per Unit
+                      Cost per kg ({currency})
                     </label>
                     <Input
                       type="number"
@@ -881,14 +770,14 @@ export default function ItemSelectionPage() {
                           commodityPerUnitCost: e.target.value,
                         }))
                       }
-                      placeholder="Enter cost per unit"
+                      placeholder="Enter cost per kg"
                     />
                   </div>
 
                   <div>
                     <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
                       <FaTag className="text-primary/60" />
-                      Packaging Cost
+                      Packaging cost per unit ({currency})
                     </label>
                     <Input
                       type="number"

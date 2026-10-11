@@ -1,20 +1,20 @@
 import prisma from "@lib/prisma";
-import { requireAdminFromRequest } from "@lib/authMiddleware";
 import { NextResponse } from "next/server";
-import { verifyToken } from "@lib/auth";
+import { withUser } from "@lib/session";
 
-export async function GET(req) {
-  const token = req.cookies.get("token")?.value;
-  // const admin = requireAdminFromRequest();
-  const user = verifyToken(token);
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// Everyone in the admin's organization, the admin included.
+export const GET = withUser(
+  async (req, { user }) => {
+    const users = await prisma.user.findMany({
+      where: { organizationId: user.organizationId },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
 
-  const users = await prisma.user.findMany({
-    where: { createdById: user.id },
-    select: { id: true, email: true, name: true, role: true },
-  });
-
-  return NextResponse.json(users, { status: 200 });
-}
+    return NextResponse.json(
+      users.map((u) => ({ ...u, isYou: u.id === user.id })),
+      { status: 200 }
+    );
+  },
+  { can: "manageUsers" }
+);

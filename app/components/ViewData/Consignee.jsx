@@ -1,4 +1,5 @@
 //components/ViewData/Consignee.jsx
+import useSession from "@hooks/useSession";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { useRouter } from "next/navigation";
@@ -12,6 +13,8 @@ import { motion } from "framer-motion";
 
 const ViewConsignee = () => {
   const queryClient = useQueryClient();
+  // Only admins may delete records; staff see edit only.
+  const { isAdmin } = useSession();
   const router = useRouter();
 
   const { data, isLoading } = useQuery({
@@ -24,7 +27,7 @@ const ViewConsignee = () => {
       await axiosInstance.delete(`/consignee/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["consignees"]);
+      queryClient.invalidateQueries({ queryKey: ["consignees"] });
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -84,6 +87,7 @@ const ViewConsignee = () => {
       label: "Balance",
       accessor: "vendor.balance",
       format: "currency",
+      currencyAccessor: "vendor.currency",
     },
     { key: "currency", label: "Currency", accessor: "vendor.currency" },
     { key: "actions", label: "Actions" },
@@ -101,7 +105,7 @@ const ViewConsignee = () => {
         headers={headers}
         data={data}
         isLoading={isLoading}
-        onDelete={handleDelete}
+        onDelete={isAdmin ? handleDelete : undefined}
         onEdit={handleEdit}
         noDataMessage="No consignees found. Add your first consignee to get started."
         addButton={

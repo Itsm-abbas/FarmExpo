@@ -1,5 +1,6 @@
 "use client";
 
+import { CurrencySelect, Field } from "@components/Page";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,6 +25,8 @@ export default function FinancialInstrumentForm() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const queryClient = useQueryClient();
+  // Editing: the form stays hidden until the saved values are in.
+  const [loadingRecord, setLoadingRecord] = useState(Boolean(id));
 
   const [formData, setFormData] = useState({
     number: "",
@@ -142,6 +145,7 @@ export default function FinancialInstrumentForm() {
   useEffect(() => {
     if (id) {
       const fetchFI = async () => {
+        setLoadingRecord(true);
         try {
           const response = await axiosInstance.get(
             `/financialinstrument/${id}`
@@ -163,6 +167,8 @@ export default function FinancialInstrumentForm() {
             color: "rgb(var(--color-text))",
             confirmButtonColor: "rgb(var(--color-primary))",
           });
+        } finally {
+          setLoadingRecord(false);
         }
       };
       fetchFI();
@@ -213,7 +219,7 @@ export default function FinancialInstrumentForm() {
         id={id}
         value={value}
         onChange={onChange}
-        disabled={mutation.isLoading || loading}
+        disabled={mutation.isPending || loading}
         className="w-full px-4 py-3 bg-background border border-primary/20 rounded-xl text-text placeholder-text/50 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 font-inter disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="" className="text-text/50">
@@ -231,6 +237,15 @@ export default function FinancialInstrumentForm() {
       </select>
     </div>
   );
+
+  if (loadingRecord) {
+    return (
+      <div role="status" className="flex items-center justify-center gap-3 min-h-64 text-text">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <span className="font-inter">Loading financial instrument details...</span>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -262,7 +277,7 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, number: e.target.value })
                   }
-                  disabled={mutation.isLoading}
+                  disabled={mutation.isPending}
                   label="Instrument Number"
                   required
                 />
@@ -275,22 +290,20 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, mode: e.target.value })
                   }
-                  disabled={mutation.isLoading}
+                  disabled={mutation.isPending}
                   label="Payment Mode"
                 />
 
-                <Input
-                  id="currency"
-                  type="text"
-                  placeholder="e.g., USD, EUR, PKR"
-                  value={formData.currency}
-                  onChange={(e) =>
-                    setFormData({ ...formData, currency: e.target.value })
-                  }
-                  disabled={mutation.isLoading}
-                  label="Currency"
-                  required
-                />
+                <Field label="Currency *" htmlFor="currency">
+                  <CurrencySelect
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) =>
+                      setFormData({ ...formData, currency: e.target.value })
+                    }
+                    required
+                  />
+                </Field>
               </div>
 
               {/* Right Column */}
@@ -343,7 +356,7 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, localDate: e.target.value })
                   }
-                  disabled={mutation.isLoading}
+                  disabled={mutation.isPending}
                   label="Instrument Date"
                   required
                 />
@@ -355,7 +368,7 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, expiryDate: e.target.value })
                   }
-                  disabled={mutation.isLoading}
+                  disabled={mutation.isPending}
                   label="Expiry Date"
                 />
               </div>
@@ -375,8 +388,8 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, amount: e.target.value })
                   }
-                  disabled={mutation.isLoading}
-                  label="Total Amount"
+                  disabled={mutation.isPending}
+                  label={`Total amount${formData.currency ? ` (${formData.currency})` : ""}`}
                   min="0"
                   step="0.01"
                 />
@@ -389,8 +402,8 @@ export default function FinancialInstrumentForm() {
                   onChange={(e) =>
                     setFormData({ ...formData, balance: e.target.value })
                   }
-                  disabled={mutation.isLoading}
-                  label="Current Balance"
+                  disabled={mutation.isPending}
+                  label={`Current balance${formData.currency ? ` (${formData.currency})` : ""}`}
                   min="0"
                   step="0.01"
                 />
@@ -407,7 +420,7 @@ export default function FinancialInstrumentForm() {
                 onChange={(e) =>
                   setFormData({ ...formData, status: e.target.value })
                 }
-                disabled={mutation.isLoading}
+                disabled={mutation.isPending}
                 label="Status"
               />
 
@@ -419,7 +432,7 @@ export default function FinancialInstrumentForm() {
                 onChange={(e) =>
                   setFormData({ ...formData, iban: e.target.value })
                 }
-                disabled={mutation.isLoading}
+                disabled={mutation.isPending}
                 label="IBAN"
               />
             </div>
@@ -432,7 +445,7 @@ export default function FinancialInstrumentForm() {
               onChange={(e) =>
                 setFormData({ ...formData, deliveryTerm: e.target.value })
               }
-              disabled={mutation.isLoading}
+              disabled={mutation.isPending}
               label="Delivery Terms"
             />
 
@@ -443,7 +456,7 @@ export default function FinancialInstrumentForm() {
             >
               <SaveButton
                 handleSubmit={handleSubmit}
-                isLoading={mutation.isLoading}
+                isLoading={mutation.isPending}
                 existingData={!!id}
               />
             </motion.div>

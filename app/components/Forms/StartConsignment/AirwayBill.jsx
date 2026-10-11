@@ -1,5 +1,6 @@
 // app/components/Forms/StartConsignment/AirwayBill.jsx
 "use client";
+import useSession from "@hooks/useSession";
 import UpdateConsignment from "@utils/updateConsignment";
 import React, { useState, useEffect } from "react";
 import Swal from "sweetalert2";
@@ -11,7 +12,6 @@ import moment from "moment";
 import { useQuery } from "@tanstack/react-query";
 import { fetchIata } from "@constants/consignmentAPI";
 import { useRouter } from "next/navigation";
-import { getCookie } from "cookies-next";
 import axiosInstance from "@utils/axiosConfig";
 import {
   FaPlane,
@@ -31,11 +31,11 @@ export default function AirwayBill({
   setActiveAccordion,
   isLocked = false,
 }) {
-  const token = getCookie("token");
   const router = useRouter();
+  const { currency: baseCurrency } = useSession();
 
   const { data: iataAgentsData, isLoading: isLoadingAgents } = useQuery({
-    queryKey: ["IataAgents"],
+    queryKey: ["iataAgents"],
     queryFn: fetchIata,
   });
 
@@ -104,71 +104,12 @@ export default function AirwayBill({
         fee: parseFloat(formData.fee),
       };
 
-      const url = existingData
-        ? `/api/airwaybill/${existingData?.id}`
-        : `/api/airwaybill`;
-      const method = existingData ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const { id } = await response.json();
-
-      // Update or create transaction for IATA agent fee
-      if (formData.fee && parseFloat(formData.fee) > 0) {
-        try {
-          // Check if there's an existing transaction for this consignment and vendor
-          const existingTransactionResponse = await axiosInstance.get(
-            `/vendor/transactions/consignment/${consignmentId}/vendor/${formData.selectedIataAgent.vendorId}`
-          );
-
-          const existingTransaction = existingTransactionResponse.data;
-
-          if (
-            existingTransaction &&
-            existingTransaction.details.includes("Airway bill")
-          ) {
-            // Update existing transaction
-            await axiosInstance.put(`/vendor/transactions`, {
-              id: existingTransaction.id,
-              type: "credit",
-              amount: parseFloat(formData.fee),
-              details: `Airway bill fee for consignment #${consignmentId}`,
-              transactionId: existingTransaction.transactionId,
-              voucherId: existingTransaction.voucherId,
-            });
-          } else {
-            // Create new transaction
-            const transactionPayload = {
-              vendorId: formData.selectedIataAgent.vendorId,
-              transactionId: `AIRWAY-${consignmentId}-${Date.now()}`,
-              voucherId: `VOUCHER-AIRWAY-${consignmentId}`,
-              type: "credit",
-              amount: parseFloat(formData.fee),
-              details: `Airway bill fee for consignment #${consignmentId}`,
-              consignmentId: parseInt(consignmentId),
-            };
-
-            await axiosInstance.post(
-              "/vendor/transactions",
-              transactionPayload
-            );
-          }
-        } catch (transactionError) {
-          console.warn("Failed to create transaction:", transactionError);
-          // Continue with airway bill creation even if transaction fails
-        }
-      }
+      // The API posts rate x weight + fee to the IATA agent's ledger once the
+      // airway bill is linked to the consignment (and re-posts it on edits).
+      const { data: saved } = existingData
+        ? await axiosInstance.put(`/airwaybill/${existingData.id}`, payload)
+        : await axiosInstance.post(`/airwaybill`, payload);
+      const { id } = saved;
 
       if (!existingData) {
         await UpdateConsignment(consignmentId, {
@@ -386,7 +327,7 @@ export default function AirwayBill({
                 value={formData.rate}
                 onChange={(e) => handleInputChange("rate", e.target.value)}
                 placeholder="Enter rate"
-                label="Rate *"
+                label={`Rate per kg (${formData.selectedIataAgent?.vendor?.currency || baseCurrency}) *`}
                 disabled={isLocked}
                 min="0"
                 step="0.01"
@@ -418,7 +359,7 @@ export default function AirwayBill({
               value={formData.fee}
               onChange={(e) => handleInputChange("fee", e.target.value)}
               placeholder="Enter agent fee"
-              label="Agent Fee *"
+              label={`Agent fee (${formData.selectedIataAgent?.vendor?.currency || baseCurrency}) *`}
               disabled={isLocked}
               min="0"
               step="0.01"
@@ -440,22 +381,22 @@ export default function AirwayBill({
                   <div>
                     <p className="text-text/70">Total Cost</p>
                     <p className="font-semibold text-text">
-                      $
+                      {formData.selectedIataAgent?.vendor?.currency || baseCurrency}{" "}
                       {(
                         (parseFloat(formData.rate) || 0) *
                         (parseFloat(formData.airwayBillWeight) || 0)
-                      ).toFixed(2)}
+                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-text/70">Total with Fee</p>
                     <p className="font-semibold text-text">
-                      $
+                      {formData.selectedIataAgent?.vendor?.currency || baseCurrency}{" "}
                       {(
                         (parseFloat(formData.rate) || 0) *
                           (parseFloat(formData.airwayBillWeight) || 0) +
                         (parseFloat(formData.fee) || 0)
-                      ).toFixed(2)}
+                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 // app/components/Forms/StartConsignment/CustomClearance.jsx
 "use client";
+import useSession from "@hooks/useSession";
 import React, { useState, useEffect } from "react";
 import UpdateConsignment from "@utils/updateConsignment";
 import Swal from "sweetalert2";
@@ -9,7 +10,6 @@ import Input from "@components/Input";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCustomAgents } from "@constants/consignmentAPI";
 import { motion } from "framer-motion";
-import { getCookie } from "cookies-next";
 import { useRouter } from "next/navigation";
 import axiosInstance from "@utils/axiosConfig";
 import {
@@ -29,7 +29,7 @@ export default function CustomClearance({
   isLocked = false,
 }) {
   const router = useRouter();
-  const token = getCookie("token");
+  const { currency: baseCurrency } = useSession();
   const [fee, setFee] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedCustomAgent, setSelectedCustomAgent] = useState(null);
@@ -81,83 +81,25 @@ export default function CustomClearance({
         fee: parseFloat(fee),
       };
 
-      const url = existingData
-        ? `/api/customclearance/${existingData.id}`
-        : `/api/customclearance`;
-      const method = existingData ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const { id } = await response.json();
-
-      // Update or create transaction for custom agent fee
-      if (fee && parseFloat(fee) > 0) {
-        try {
-          // Check if there's an existing transaction for this consignment and vendor
-          const existingTransactionResponse = await axiosInstance.get(
-            `/vendor/transactions/consignment/${consignmentId}/vendor/${selectedCustomAgent.vendorId}`
-          );
-
-          const existingTransaction = existingTransactionResponse.data;
-
-          if (
-            existingTransaction &&
-            existingTransaction.details.includes("Custom clearance")
-          ) {
-            // Update existing transaction
-            await axiosInstance.put(`/vendor/transactions`, {
-              id: existingTransaction.id,
-              type: "credit",
-              amount: parseFloat(fee),
-              details: `Custom clearance fee for consignment #${consignmentId}`,
-              transactionId: existingTransaction.transactionId,
-              voucherId: existingTransaction.voucherId,
-            });
-          } else {
-            // Create new transaction
-            const transactionPayload = {
-              vendorId: selectedCustomAgent.vendorId,
-              transactionId: `CUSTOM-${consignmentId}-${Date.now()}`,
-              voucherId: `VOUCHER-CUSTOM-${consignmentId}`,
-              type: "credit",
-              amount: parseFloat(fee),
-              details: `Custom clearance fee for consignment #${consignmentId}`,
-              consignmentId: parseInt(consignmentId),
-            };
-
-            await axiosInstance.post(
-              "/vendor/transactions",
-              transactionPayload
-            );
-          }
-        } catch (transactionError) {
-          console.warn("Failed to create transaction:", transactionError);
-          // Continue with custom clearance creation even if transaction fails
-        }
-      }
+      // The API posts the fee to the custom agent's ledger once the clearance
+      // is linked to the consignment (and re-posts it on edits).
+      const { data: saved } = existingData
+        ? await axiosInstance.put(`/customclearance/${existingData.id}`, payload)
+        : await axiosInstance.post(`/customclearance`, payload);
+      const { id } = saved;
 
       if (!existingData) {
         await UpdateConsignment(
           consignmentId,
-          { customClearance: { id, ...payload } },
+          { customClearance: { id } },
           "Custom Cleared"
         );
       }
 
+      // `saved` includes `customAgent`, which the form reads when re-opened.
       setFormStatuses((prev) => ({
         ...prev,
-        customClearance: { id, ...payload },
+        customClearance: saved,
       }));
       setActiveAccordion(null);
 
@@ -352,7 +294,7 @@ export default function CustomClearance({
               value={fee}
               onChange={(e) => setFee(e.target.value)}
               placeholder="Enter clearance fee"
-              label="Clearance Fee *"
+              label={`Clearance fee (${selectedCustomAgent?.vendor?.currency || baseCurrency}) *`}
               disabled={isLocked}
               min="0"
               step="0.01"
