@@ -19,6 +19,9 @@ export const queryKeys = {
   utilization: ["utilization"],
   vendors: ["vendors-list"],
   vendorTransactions: ["vendorTransactions"],
+  // Filtered lists: ["purchases", { from, to, ... }], ["dailyPrices", { ... }].
+  purchases: ["purchases"],
+  dailyPrices: ["dailyPrices"],
 };
 
 const get = (url) => async () => (await axiosInstance.get(url)).data;
@@ -68,3 +71,17 @@ export function markConsignmentChanged(queryClient, id) {
     queryClient.invalidateQueries({ queryKey, refetchType: "none" });
   }
 }
+
+// After a purchase changes: purchase lists, daily prices, the trader's
+// balance and the ledgers are out of date.
+export function markPurchasesChanged(queryClient) {
+  queryClient.invalidateQueries({ queryKey: queryKeys.purchases });
+  queryClient.invalidateQueries({ queryKey: queryKeys.dailyPrices });
+  for (const queryKey of [queryKeys.traders, queryKeys.vendors, queryKeys.vendorTransactions]) {
+    queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+  }
+}
+
+// Query string from filters, leaving out empty ones.
+export const toSearch = (filters) =>
+  new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();

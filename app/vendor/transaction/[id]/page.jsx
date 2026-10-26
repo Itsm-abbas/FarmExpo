@@ -579,7 +579,7 @@ export default function VendorTransactionPage() {
                         </div>
                       </th>
                       <th className="p-4 text-left text-text font-semibold text-sm">
-                        Consignment
+                        Linked to
                       </th>
                       <th className="p-4 text-right text-text font-semibold text-sm">
                         Credit ({data.vendor.currency})
@@ -634,7 +634,14 @@ export default function VendorTransactionPage() {
                                 href={`/startconsignment/${transaction.consignmentId}`}
                                 className="text-primary hover:text-accent underline font-medium"
                               >
-                                #{transaction.consignmentId}
+                                Consignment #{transaction.consignmentId}
+                              </Link>
+                            ) : transaction.purchaseId ? (
+                              <Link
+                                href={`/purchases?edit=${transaction.purchaseId}`}
+                                className="text-primary hover:text-accent underline font-medium"
+                              >
+                                Purchase #{transaction.purchaseId}
                               </Link>
                             ) : (
                               "-"
@@ -676,10 +683,14 @@ export default function VendorTransactionPage() {
                           </td>
                           <td className="p-4">
                             {transaction.source ? (
-                              // Posted from a consignment: change it there.
+                              // Posted from a consignment or purchase: change it there.
                               <div
                                 className="text-center text-xs text-text/60"
-                                title="Posted from the consignment. Edit the consignment to change it."
+                                title={
+                                  transaction.source === "purchase"
+                                    ? "Posted from the purchase. Edit the purchase to change it."
+                                    : "Posted from the consignment. Edit the consignment to change it."
+                                }
                               >
                                 Auto
                               </div>

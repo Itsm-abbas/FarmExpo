@@ -180,15 +180,17 @@ const ReusableTable = ({
                                   {field.label}:
                                 </span>
                                 <span className="text-text font-inter">
-                                  {formatValue(
-                                    field.accessor
-                                      ? getNestedValue(item, field.accessor)
-                                      : item[field.key],
-                                    field.format,
-                                    field.currencyAccessor
-                                      ? getNestedValue(item, field.currencyAccessor)
-                                      : undefined
-                                  )}
+                                  {field.render
+                                    ? field.render(item)
+                                    : formatValue(
+                                        field.accessor
+                                          ? getNestedValue(item, field.accessor)
+                                          : item[field.key],
+                                        field.format,
+                                        field.currencyAccessor
+                                          ? getNestedValue(item, field.currencyAccessor)
+                                          : undefined
+                                      )}
                                 </span>
                               </div>
                             ))}
@@ -290,15 +292,17 @@ const ReusableTable = ({
                               key={idx}
                               className="px-4 py-3 font-inter text-text"
                             >
-                              {formatValue(
-                                field.accessor
-                                  ? getNestedValue(item, field.accessor)
-                                  : item[field.key],
-                                field.format,
-                                field.currencyAccessor
-                                  ? getNestedValue(item, field.currencyAccessor)
-                                  : undefined
-                              )}
+                              {field.render
+                                ? field.render(item)
+                                : formatValue(
+                                    field.accessor
+                                      ? getNestedValue(item, field.accessor)
+                                      : item[field.key],
+                                    field.format,
+                                    field.currencyAccessor
+                                      ? getNestedValue(item, field.currencyAccessor)
+                                      : undefined
+                                  )}
                             </td>
                           ))}
                           <td className="px-4 py-3">

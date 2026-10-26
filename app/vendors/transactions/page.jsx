@@ -38,13 +38,13 @@ export default function VendorsTransactionsPage() {
       if (!res.ok) throw new Error("Failed to recalculate ledgers");
       return res.json();
     },
-    onSuccess: ({ consignments, vendors }) => {
+    onSuccess: ({ consignments, purchases = 0, vendors }) => {
       queryClient.invalidateQueries({ queryKey: ["vendors-list"] });
       queryClient.invalidateQueries({ queryKey: ["vendorTransactions"] });
       Swal.fire({
         icon: "success",
         title: "Ledgers recalculated",
-        text: `Re-posted ${consignments} consignment(s) and recomputed ${vendors} vendor balance(s).`,
+        text: `Re-posted ${consignments} consignment(s) and ${purchases} purchase(s), and recomputed ${vendors} vendor balance(s).`,
         background: "rgb(var(--color-background))",
         color: "rgb(var(--color-text))",
         confirmButtonColor: "rgb(var(--color-primary))",

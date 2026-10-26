@@ -7,6 +7,8 @@ import { ownedBy, stamp, withUser } from "@lib/session";
 export const GET = withUser(async (req, { user }) => {
   const traders = await prisma.trader.findMany({
     where: ownedBy(user),
+    // Traders we buy from have a ledger account.
+    include: { vendor: { select: { id: true, balance: true, currency: true } } },
     orderBy: { id: "asc" },
   });
   return NextResponse.json(traders);

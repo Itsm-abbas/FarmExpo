@@ -257,7 +257,7 @@ export default function Dashboard() {
           icon={LuArrowUpRight}
           vendors={payables}
           loading={vendorsLoading}
-          empty="Nothing owed to packers, IATA agents or custom agents."
+          empty="Nothing owed to farmers, packers, IATA agents or custom agents."
         />
         <BalancePanel
           title="Consignees owe you"

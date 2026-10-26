@@ -9,6 +9,7 @@ import {
   LuBookOpen,
   LuBoxes,
   LuBuilding2,
+  LuChartLine,
   LuChevronsUpDown,
   LuHandshake,
   LuLandmark,
@@ -18,6 +19,7 @@ import {
   LuPackage,
   LuPlane,
   LuSettings,
+  LuShoppingBasket,
   LuSprout,
   LuStamp,
   LuUser,
@@ -47,10 +49,17 @@ const NAV = [
     ],
   },
   {
+    title: "Buying",
+    items: [
+      { label: "Purchases", href: "/purchases", icon: LuShoppingBasket, exact: true },
+      { label: "Daily price list", href: "/purchases/daily-prices", icon: LuChartLine },
+    ],
+  },
+  {
     title: "Partners",
     items: [
       { label: "Consignees", href: "/consignment/consignee/view-consignee", icon: LuBuilding2, match: ["/consignment/consignee/"] },
-      { label: "Traders", href: "/consignment/trader/view-trader", icon: LuHandshake, match: ["/consignment/trader/"] },
+      { label: "Traders & farmers", href: "/consignment/trader/view-trader", icon: LuHandshake, match: ["/consignment/trader/"] },
       { label: "Packers", href: "/consignment/packer/view-packer", icon: LuWarehouse, match: ["/consignment/packer/"] },
       { label: "IATA agents", href: "/consignment/iata-agent/view-iataAgent", icon: LuPlane, match: ["/consignment/iata-agent/"] },
       { label: "Custom agents", href: "/consignment/custom-agent/view-customAgent", icon: LuStamp, match: ["/consignment/custom-agent/"] },

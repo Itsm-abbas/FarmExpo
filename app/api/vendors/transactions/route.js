@@ -18,15 +18,19 @@ export const GET = withUser(async (req, { user }) => {
       ...Object.fromEntries(
         ROLES.map((role) => [role, { select: { id: true }, take: 1 }])
       ),
+      // A trader/farmer we buy from (one account per trader).
+      trader: { select: { id: true } },
     },
     orderBy: { name: "asc" },
   });
 
   return NextResponse.json(
     vendors.map((vendor) => {
-      const role = ROLES.find((r) => vendor[r].length) || null;
+      const role =
+        ROLES.find((r) => vendor[r].length) || (vendor.trader ? "trader" : null);
       const rest = { ...vendor };
       ROLES.forEach((r) => delete rest[r]);
+      delete rest.trader;
       return { ...rest, role };
     })
   );

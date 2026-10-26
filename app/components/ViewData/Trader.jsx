@@ -1,5 +1,7 @@
 //components/ViewData/Trader.jsx
+import Link from "next/link";
 import useSession from "@hooks/useSession";
+import { formatMoney } from "@utils/money";
 import LinkButton from "@components/Button/LinkButton";
 import ReusableTable from "@components/Table";
 import { fetchTraders } from "@constants/consignmentAPI";
@@ -80,6 +82,22 @@ const ViewTrader = () => {
     { key: "name", label: "Trader Name", accessor: "name" },
     { key: "address", label: "Business Address", accessor: "address" },
     { key: "country", label: "Country", accessor: "country" },
+    {
+      key: "balance",
+      label: "Balance owed",
+      // Only traders we've bought from have a ledger.
+      render: (item) =>
+        item.vendor ? (
+          <Link
+            href={`/vendor/transaction/${item.vendor.id}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {formatMoney(item.vendor.balance || 0, item.vendor.currency)}
+          </Link>
+        ) : (
+          <span className="text-text/40">No purchases</span>
+        ),
+    },
     { key: "actions", label: "Actions" },
   ];
 

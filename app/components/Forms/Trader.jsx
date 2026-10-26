@@ -22,6 +22,10 @@ export default function TraderForm() {
   const token = getCookie("token");
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  // e.g. ?returnTo=/purchases when adding a farmer while recording a purchase.
+  const returnTo = /^\/[a-z]/i.test(searchParams.get("returnTo") || "")
+    ? searchParams.get("returnTo")
+    : null;
   const router = useRouter();
 
   const [formData, setFormData] = useState({
@@ -60,7 +64,8 @@ export default function TraderForm() {
   }, [id]);
 
   const handleSubmit = async () => {
-    const requiredFields = ["ntn", "name", "address", "country"];
+    // Farmers often have no NTN, so it is optional.
+    const requiredFields = ["name", "address", "country"];
     const missingFields = requiredFields.filter(
       (field) => !formData[field]?.trim()
     );
@@ -89,7 +94,7 @@ export default function TraderForm() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          ntn: formData.ntn.trim(),
+          ntn: (formData.ntn || "").trim(),
           name: formData.name.trim(),
           address: formData.address.trim(),
           country: formData.country.trim(),
@@ -118,7 +123,7 @@ export default function TraderForm() {
         setFormData({ ntn: "", name: "", address: "", country: "" });
         // Redirect after successful creation
         setTimeout(() => {
-          router.push("/consignment/trader/view-trader");
+          router.push(returnTo || "/consignment/trader/view-trader");
         }, 1000);
       }
     } catch (error) {
@@ -202,10 +207,9 @@ export default function TraderForm() {
                 onChange={(e) =>
                   setFormData({ ...formData, ntn: e.target.value })
                 }
-                placeholder="Enter NTN number"
-                label="NTN Number"
+                placeholder="Enter NTN or CNIC (optional for farmers)"
+                label="NTN / CNIC"
                 disabled={isSubmitting}
-                required
               />
 
               <Input
@@ -215,8 +219,8 @@ export default function TraderForm() {
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="Enter trader/company name"
-                label="Trader Name"
+                placeholder="Enter trader, company or farmer name"
+                label="Trader / Farmer Name"
                 disabled={isSubmitting}
                 required
               />
@@ -291,7 +295,7 @@ export default function TraderForm() {
           <span>Trader Guidelines</span>
         </h3>
         <ul className="text-sm font-inter text-text/70 space-y-2">
-          <li>• All fields are required for proper business registration</li>
+          <li>• NTN / CNIC is optional for farmers; the other fields are required</li>
           <li>• Ensure NTN number is accurate for tax compliance</li>
           <li>
             • Provide complete business address for official correspondence

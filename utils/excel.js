@@ -3,6 +3,7 @@
 // so sections never drift out of place.
 import XLSX from "xlsx-js-style";
 import { formatDate } from "@utils/invoice";
+import { formatDay } from "@utils/days";
 
 const MONEY = "#,##0.00";
 const KG = '#,##0.00" kg"';
@@ -353,4 +354,57 @@ export function exportStatementExcel({ vendor, transactions, organization, filen
   );
 
   save(b, "Statement", filename);
+}
+
+// Daily price list: one row per day and commodity with the weighted average
+// cost per kg, plus a sheet with every purchase behind the averages.
+export function exportDailyPricesExcel({ rows, organization, currency, from, to, filename }) {
+  const period = `${from ? formatDay(from) : "the first purchase"} to ${to ? formatDay(to) : "today"}`;
+
+  const daily = new SheetBuilder([14, 20, 36, 15, 17, 17, 14, 14], organization?.brandColor);
+  daily.title(organization?.name || "FarmExpo", orgSubtitle(organization));
+  daily.blank();
+  daily.pairs([["Daily price list", period], ["Currency", currency]], { half: 4 });
+  daily.blank();
+  daily.table(
+    [
+      { header: "Date", key: (r) => formatDay(r.date) },
+      { header: "Commodity", key: (r) => r.commodity?.name || "" },
+      { header: "Bought from", key: (r) => r.traders.map((t) => t.name).join(", ") },
+      { header: "Quantity", key: "quantity", format: KG },
+      { header: `Total paid (${currency})`, key: "amount", format: MONEY },
+      { header: `Average per kg (${currency})`, key: "averageRate", format: MONEY },
+      { header: "Lowest per kg", key: "minRate", format: MONEY },
+      { header: "Highest per kg", key: "maxRate", format: MONEY },
+    ],
+    rows
+  );
+
+  const detail = new SheetBuilder([14, 20, 28, 15, 15, 17, 30], organization?.brandColor);
+  detail.title("Purchases", period);
+  detail.blank();
+  detail.table(
+    [
+      { header: "Date", key: (p) => formatDay(p.date) },
+      { header: "Commodity", key: (p) => p.commodity },
+      { header: "Farmer / trader", key: (p) => p.trader, total: "Totals" },
+      { header: "Quantity", key: "quantity", format: KG, total: "sum" },
+      { header: `Rate per kg (${currency})`, key: "rate", format: MONEY },
+      { header: `Amount (${currency})`, key: "amount", format: MONEY, total: "sum" },
+      { header: "Notes", key: (p) => p.notes || "" },
+    ],
+    rows.flatMap((r) =>
+      r.purchases.map((p) => ({
+        ...p,
+        date: r.date,
+        commodity: r.commodity?.name || "",
+        trader: p.trader.name,
+      }))
+    )
+  );
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, daily.toSheet(), "Daily prices");
+  XLSX.utils.book_append_sheet(workbook, detail.toSheet(), "Purchases");
+  XLSX.writeFile(workbook, filename, { compression: true, bookType: "xlsx" });
 }

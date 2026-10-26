@@ -1,8 +1,9 @@
-// Re-posts the ledger entries of all of the user's consignments and recomputes
+// Re-posts the ledger entries of all of the user's consignments and purchases, and recomputes
 // every vendor balance. Used to repair ledgers written by older versions.
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
 import { recomputeVendorBalance, syncConsignmentLedger } from "@lib/ledger";
+import { ensureTraderVendor, syncPurchaseLedger } from "@lib/purchases";
 import { ownedBy, withUser } from "@lib/session";
 
 export const maxDuration = 60;
@@ -20,6 +21,18 @@ export const POST = withUser(async (req, { user }) => {
     );
   }
 
+  const purchases = await prisma.purchase.findMany({
+    where: ownedBy(user),
+    select: { id: true, traderId: true },
+    orderBy: { id: "asc" },
+  });
+  for (const { id, traderId } of purchases) {
+    await prisma.$transaction(async (tx) => {
+      await ensureTraderVendor(tx, traderId, user);
+      await syncPurchaseLedger(tx, id, user.id);
+    }, { maxWait: 10000, timeout: 30000 });
+  }
+
   const vendors = await prisma.vendor.findMany({
     where: ownedBy(user),
     select: { id: true },
@@ -30,6 +43,7 @@ export const POST = withUser(async (req, { user }) => {
 
   return NextResponse.json({
     consignments: consignments.length,
+    purchases: purchases.length,
     vendors: vendors.length,
   });
 }, { can: "editLedger" });

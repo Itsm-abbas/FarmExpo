@@ -25,6 +25,7 @@ export const GET = withUser(async (req, { user, params }) => {
           status: true,
         },
       },
+      purchase: { select: { id: true, date: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });

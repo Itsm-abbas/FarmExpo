@@ -27,8 +27,10 @@ import {
   listQueries,
   markConsignmentChanged,
   queryKeys,
+  toSearch,
   useConsignment,
 } from "@hooks/queries";
+import { daysBefore, formatDay, formatKg } from "@utils/days";
 
 export default function ItemSelectionPage() {
   const router = useRouter();
@@ -72,6 +74,19 @@ export default function ItemSelectionPage() {
     error: consignmentError,
   } = useConsignment(id);
   const goods = consignment?.goods;
+
+  // What each commodity cost from farmers on the shipping day, or the latest
+  // day with purchases in the week before it (rows come newest day first).
+  const shipDay = consignment?.date ? consignment.date.slice(0, 10) : null;
+  const priceRange = shipDay ? { from: daysBefore(shipDay, 7), to: shipDay } : null;
+  const { data: recentPrices = [] } = useQuery({
+    queryKey: [...queryKeys.dailyPrices, priceRange],
+    queryFn: async () =>
+      (await axiosInstance.get(`/purchases/daily?${toSearch(priceRange)}`)).data,
+    enabled: Boolean(priceRange),
+  });
+  const purchasePrice = (commodityId) =>
+    recentPrices.find((row) => row.commodity.id === commodityId);
 
   // Applies a saved or deleted item to the cached consignment, instead of
   // fetching the whole consignment again.
@@ -772,6 +787,32 @@ export default function ItemSelectionPage() {
                       }
                       placeholder="Enter cost per kg"
                     />
+                    {(() => {
+                      const price = currentItem && purchasePrice(currentItem.id);
+                      if (!price) return null;
+                      return (
+                        <p className="mt-2 text-xs text-text/65">
+                          Bought at an average of{" "}
+                          <strong className="text-text">
+                            {formatMoney(price.averageRate, currency, { decimals: 2 })}/kg
+                          </strong>{" "}
+                          on {formatDay(price.date)} ({formatKg(price.quantity)} from{" "}
+                          {price.traders.length} farmer{price.traders.length === 1 ? "" : "s"}).{" "}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setItemDetail((prev) => ({
+                                ...prev,
+                                commodityPerUnitCost: String(price.averageRate),
+                              }))
+                            }
+                            className="font-medium text-primary hover:underline"
+                          >
+                            Use this
+                          </button>
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   <div>

@@ -36,7 +36,9 @@ async function findOwnedTransaction(id, user) {
   if (txn.source) {
     throw new HttpError(
       400,
-      `This entry was posted automatically from consignment #${txn.consignmentId}. Edit the consignment instead.`
+      txn.source === "purchase"
+        ? `This entry was posted automatically from purchase #${txn.purchaseId}. Edit the purchase instead.`
+        : `This entry was posted automatically from consignment #${txn.consignmentId}. Edit the consignment instead.`
     );
   }
   return txn;

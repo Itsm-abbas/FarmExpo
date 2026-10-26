@@ -90,6 +90,11 @@ model Trader {
   updatedAt            DateTime              @updatedAt
   financialInstruments FinancialInstrument[]
   consignments         Consignment[]
+  // Ledger account for what we owe the trader (e.g. a farmer we buy from).
+  // Created with the first purchase recorded from them.
+  vendorId             Int?                  @unique
+  vendor               Vendor?               @relation(fields: [vendorId], references: [id])
+  purchases            Purchase[]
 
   @@index([userId])
   @@index([organizationId])
@@ -105,6 +110,7 @@ model Commodity {
   updatedAt      DateTime @updatedAt
 
   consignmentItems ConsignmentItem[]
+  purchases        Purchase[]
 
   @@index([userId])
   @@index([organizationId])
@@ -130,6 +136,7 @@ model Vendor {
   consignee    Consignee[]
   iataAgent    IATAAgent[]
   customAgent  CustomAgent[]
+  trader       Trader?
   transactions Transaction[]
 
   @@index([userId])
@@ -149,14 +156,47 @@ model Transaction {
   balanceAfter  Float // vendor balance immediately after this txn
   consignmentId Int?
   consignment   Consignment? @relation(fields: [consignmentId], references: [id])
+  purchaseId    Int?
+  purchase      Purchase?    @relation(fields: [purchaseId], references: [id])
   // Set for entries posted automatically from a consignment
-  // ("airwayBill" | "customClearance" | "packing" | "consignee" | "recovery").
-  // Null for entries added manually on the ledger page.
+  // ("airwayBill" | "customClearance" | "packing" | "consignee" | "recovery")
+  // or a purchase ("purchase"). Null for entries added manually on the ledger page.
   source        String?
   createdAt     DateTime     @default(now())
 
   @@index([vendorId])
   @@index([consignmentId])
+  @@index([purchaseId])
+}
+
+// Produce bought from a trader or farmer. Each purchase posts what we owe
+// them to their ledger, and the daily price list averages purchases per day.
+model Purchase {
+  id             Int       @id @default(autoincrement())
+  userId         Int?
+  organizationId Int?
+  // The day of the purchase (midnight UTC).
+  date           DateTime
+  traderId       Int
+  trader         Trader    @relation(fields: [traderId], references: [id])
+  commodityId    Int
+  commodity      Commodity @relation(fields: [commodityId], references: [id])
+  // Kilograms bought.
+  quantity       Float
+  // Price per kg, in the organization's base currency.
+  rate           Float
+  // quantity x rate, rounded to 2 decimals.
+  amount         Float
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  transactions Transaction[]
+
+  @@index([organizationId, date])
+  @@index([userId])
+  @@index([traderId])
+  @@index([commodityId])
 }
 
 model Packer {
