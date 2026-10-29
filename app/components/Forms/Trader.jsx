@@ -16,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { getCookie } from "cookies-next";
 import axiosInstance from "@utils/axiosConfig";
+import useSession from "@hooks/useSession";
 import { motion } from "framer-motion";
 
 export default function TraderForm() {
@@ -28,11 +29,13 @@ export default function TraderForm() {
     : null;
   const router = useRouter();
 
+  const { currency } = useSession();
   const [formData, setFormData] = useState({
     ntn: "",
     name: "",
     address: "",
     country: "",
+    balance: 0,
   });
   // An existing record shows the loader until its saved values are in.
   const [loading, setLoading] = useState(Boolean(id));
@@ -45,7 +48,9 @@ export default function TraderForm() {
         try {
           const response = await axiosInstance.get(`/trader/${id}`);
           const { data } = response;
-          setFormData(data);
+          // "Opening balance" edits the ledger's opening balance; the running
+          // balance is the ledger's.
+          setFormData({ ...data, balance: data.vendor?.openingBalance ?? 0 });
         } catch (error) {
           Swal.fire({
             icon: "error",
@@ -98,11 +103,13 @@ export default function TraderForm() {
           name: formData.name.trim(),
           address: formData.address.trim(),
           country: formData.country.trim(),
+          balance: Number(formData.balance) || 0,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save data");
+        const { error } = await response.json().catch(() => ({}));
+        throw new Error(typeof error === "string" ? error : "Failed to save data");
       }
 
       Swal.fire({
@@ -120,7 +127,7 @@ export default function TraderForm() {
       });
 
       if (!id) {
-        setFormData({ ntn: "", name: "", address: "", country: "" });
+        setFormData({ ntn: "", name: "", address: "", country: "", balance: 0 });
         // Redirect after successful creation
         setTimeout(() => {
           router.push(returnTo || "/consignment/trader/view-trader");
@@ -258,6 +265,23 @@ export default function TraderForm() {
                 disabled={isSubmitting}
                 required
               />
+
+              <Input
+                id="balance"
+                type="number"
+                step="any"
+                value={formData.balance}
+                onChange={(e) =>
+                  setFormData({ ...formData, balance: e.target.value })
+                }
+                placeholder="Enter opening balance"
+                label={`Opening balance (${formData.vendor?.currency || currency})`}
+                disabled={isSubmitting}
+              />
+              <p className="-mt-2 text-xs text-text/60">
+                What you already owed them before using FarmExpo. Use a negative
+                amount if they owed you.
+              </p>
             </div>
           </div>
 

@@ -85,7 +85,7 @@ const ViewTrader = () => {
     {
       key: "balance",
       label: "Balance owed",
-      // Only traders we've bought from have a ledger.
+      // Traders get a ledger with their first purchase or an opening balance.
       render: (item) =>
         item.vendor ? (
           <Link
@@ -95,7 +95,7 @@ const ViewTrader = () => {
             {formatMoney(item.vendor.balance || 0, item.vendor.currency)}
           </Link>
         ) : (
-          <span className="text-text/40">No purchases</span>
+          <span className="text-text/40">No ledger yet</span>
         ),
     },
     { key: "actions", label: "Actions" },

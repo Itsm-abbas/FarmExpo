@@ -7,10 +7,14 @@ import {
   findOwned,
   ownedBy,
   parseId,
+  toNumber,
   withUser,
 } from "@lib/session";
+import { setTraderOpeningBalance } from "@lib/purchases";
 
-const LEDGER = { vendor: { select: { id: true, balance: true, currency: true } } };
+const LEDGER = {
+  vendor: { select: { id: true, balance: true, openingBalance: true, currency: true } },
+};
 
 // ✅ GET /api/trader/:id
 export const GET = withUser(async (req, { user, params }) => {
@@ -28,17 +32,22 @@ export const PUT = withUser(async (req, { user, params }) => {
   const id = parseId(params.id);
   const trader = await findOwned(prisma.trader, id, ownedBy(user));
 
-  const parsed = traderSchema.partial().safeParse(await req.json());
+  const body = await req.json();
+  const parsed = traderSchema.partial().safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.errors }, { status: 400 });
   }
+  toNumber(body.balance, "balance"); // reject a bad amount before saving anything
 
   const updated = await prisma.$transaction(async (tx) => {
     // The ledger account carries the same name and details.
     if (trader.vendorId) {
       await tx.vendor.update({ where: { id: trader.vendorId }, data: parsed.data });
     }
-    return tx.trader.update({ where: { id }, data: parsed.data, include: LEDGER });
+    await tx.trader.update({ where: { id }, data: parsed.data });
+    // "Opening balance" edits what we owed them before any ledger entry.
+    await setTraderOpeningBalance(tx, id, body.balance, user);
+    return tx.trader.findUnique({ where: { id }, include: LEDGER });
   }, TX_OPTIONS);
 
   return NextResponse.json(updated);
