@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [stageFilter, setStageFilter] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newNumber, setNewNumber] = useState("");
 
   const { data: consignments = [], isLoading } = useQuery({
     queryKey: queryKeys.consignments,
@@ -120,6 +121,8 @@ export default function Dashboard() {
 
   // The items page needs these lists; fetch them while the date is picked.
   const openStartDialog = () => {
+    setNewNumber("");
+    startConsignment.reset();
     setDialogOpen(true);
     queryClient.prefetchQuery(listQueries.commodities);
     queryClient.prefetchQuery(listQueries.packaging);
@@ -139,8 +142,8 @@ export default function Dashboard() {
     .slice(0, 8);
 
   const startConsignment = useMutation({
-    mutationFn: async (date) =>
-      (await axiosInstance.post(`/consignment`, { date, status: "Not started" })).data,
+    mutationFn: async ({ date, number }) =>
+      (await axiosInstance.post(`/consignment`, { date, number, status: "Not started" })).data,
     onSuccess: (data) => {
       // The new consignment is already in hand, so the items page opens
       // without fetching it again.
@@ -148,7 +151,7 @@ export default function Dashboard() {
       queryClient.setQueryData(queryKeys.consignments, (prev) => (prev ? [data, ...prev] : prev));
       router.push(`/items-selection/${data.id}`);
     },
-    onError: (error) => Swal.fire({ ...swalTheme, icon: "error", title: "Couldn't start the consignment", text: error.message }),
+    // Shown in the dialog (e.g. a number that is already used).
   });
   // Stays true after the consignment is created, until the items page replaces this one.
   const starting = startConsignment.isPending || startConsignment.isSuccess;
@@ -168,7 +171,7 @@ export default function Dashboard() {
     const { isConfirmed } = await Swal.fire({
       ...swalTheme,
       icon: "warning",
-      title: `Delete consignment #${item.id}?`,
+      title: `Delete consignment ${item.number || `#${item.id}`}?`,
       text: "Its items, airway bill, packing, clearance and ledger entries are removed too. This can't be undone.",
       showCancelButton: true,
       confirmButtonText: "Delete",
@@ -311,7 +314,7 @@ export default function Dashboard() {
                   const i = stageIndex(item.status);
                   return (
                     <tr key={item.id} className="hover:bg-text/[0.02]">
-                      <td className="px-5 py-3 font-medium tabular text-text">#{item.id}</td>
+                      <td className="px-5 py-3 font-medium tabular text-text">{item.number || `#${item.id}`}</td>
                       <td className="px-3 py-3 tabular text-text/75">
                         {item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                       </td>
@@ -359,24 +362,29 @@ export default function Dashboard() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (!starting) startConsignment.mutate(newDate);
+              if (!starting) startConsignment.mutate({ date: newDate, number: newNumber.trim() });
             }}
             className="w-full max-w-sm rounded-2xl border border-text/10 bg-surface p-6 shadow-2xl"
             aria-busy={starting}
           >
             <h2 id="start-title" className="font-display text-xl font-semibold text-text">Start a consignment</h2>
             <p className="mt-1 text-sm text-text/60">
-              Pick the shipping date. You'll add items next{organization?.name ? ` for ${organization.name}` : ""}.
+              Enter its number and shipping date. You'll add items next{organization?.name ? ` for ${organization.name}` : ""}.
             </p>
-            <Field label="Date" htmlFor="consignment-date" className="mt-5">
-              <input id="consignment-date" type="date" required value={newDate} onChange={(e) => setNewDate(e.target.value)} disabled={starting} className={inputClass} autoFocus />
+            <Field label="Consignment number" htmlFor="consignment-number" className="mt-5">
+              <input id="consignment-number" required maxLength={50} value={newNumber} onChange={(e) => { setNewNumber(e.target.value); startConsignment.reset(); }} disabled={starting} placeholder="e.g. FE-2026-014" className={inputClass} autoFocus />
             </Field>
-            <p role="status" className="mt-4 min-h-5 text-sm text-text/60">
+            <Field label="Date" htmlFor="consignment-date" className="mt-4">
+              <input id="consignment-date" type="date" required value={newDate} onChange={(e) => setNewDate(e.target.value)} disabled={starting} className={inputClass} />
+            </Field>
+            <p role={startConsignment.isError ? "alert" : "status"} className={`mt-4 min-h-5 text-sm ${startConsignment.isError ? "text-red-600" : "text-text/60"}`}>
               {startConsignment.isPending
                 ? "Creating the consignment…"
                 : startConsignment.isSuccess
-                  ? `Consignment #${startConsignment.data.id} created. Opening item selection…`
-                  : ""}
+                  ? `Consignment ${startConsignment.data.number} created. Opening item selection…`
+                  : startConsignment.isError
+                    ? startConsignment.error.message
+                    : ""}
             </p>
             <div className="mt-2 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setDialogOpen(false)} disabled={starting}>Cancel</Button>

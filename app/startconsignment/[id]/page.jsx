@@ -37,6 +37,10 @@ import DamageForm from "@components/Forms/StartConsignment/Damage";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import DailyExpenses from "@components/Forms/StartConsignment/DailyExpenses";
+import FinancialInstrumentsForm from "@components/Forms/StartConsignment/Fiu";
+import TaxesForm from "@components/Forms/StartConsignment/Taxes";
+import axiosInstance from "@utils/axiosConfig";
+import { FaChartLine, FaPen, FaPercent } from "react-icons/fa";
 
 const formsData = [
   {
@@ -62,6 +66,14 @@ const formsData = [
     key: "airwayBill",
     icon: FaClipboardCheck,
     description: "Add airway bill or seaway bill details",
+  },
+  {
+    id: 10,
+    name: "Financial Instruments",
+    component: FinancialInstrumentsForm,
+    key: "utilizations",
+    icon: FaChartLine,
+    description: "Instruments this consignment uses; the goods declaration takes their currency",
   },
   {
     id: 4,
@@ -94,6 +106,14 @@ const formsData = [
     key: "dailyExpenses",
     icon: FaDollarSign,
     description: "Record daily operational expenses",
+  },
+  {
+    id: 11,
+    name: "Taxes",
+    component: TaxesForm,
+    key: "taxes",
+    icon: FaPercent,
+    description: "Taxes with remarks, added to the total cost and the invoice",
   },
   {
     id: 7,
@@ -176,6 +196,29 @@ export default function StartConsignmentPage() {
     [queryClient, consignmentId]
   );
 
+  // The consignment number, entered by the user; editable from the header.
+  const [numberDraft, setNumberDraft] = useState(null);
+  const [numberError, setNumberError] = useState("");
+  const [savingNumber, setSavingNumber] = useState(false);
+  const displayNumber = formStatuses.number || `#${consignmentId}`;
+  const saveNumber = async (e) => {
+    e.preventDefault();
+    if (!numberDraft?.trim()) return setNumberError("Enter the consignment number.");
+    setSavingNumber(true);
+    setNumberError("");
+    try {
+      const { data } = await axiosInstance.put(`/consignment/${consignmentId}`, {
+        number: numberDraft.trim(),
+      });
+      setFormStatuses(() => data);
+      setNumberDraft(null);
+    } catch (error) {
+      setNumberError(error.message);
+    } finally {
+      setSavingNumber(false);
+    }
+  };
+
   // Load every list the sections choose from in parallel, up front.
   useEffect(() => {
     Object.values(listQueries).forEach((query) => queryClient.prefetchQuery(query));
@@ -227,6 +270,10 @@ export default function StartConsignmentPage() {
   };
 
   const getFormStatus = (formKey) => {
+    // Lists count as done once they have an entry.
+    if (formKey === "utilizations" || formKey === "taxes") {
+      return Array.isArray(formStatuses[formKey]) && formStatuses[formKey].length > 0;
+    }
     if (formKey === "goods/packaging") {
       return formStatuses.goods?.some((item) => item?.packaging);
     }
@@ -276,9 +323,48 @@ export default function StartConsignmentPage() {
           transition={{ duration: 0.6 }}
           className="text-center space-y-4"
         >
-          <h1 className="text-4xl font-bold font-poppins text-text">
-            Consignment #{consignmentId}
-          </h1>
+          {numberDraft === null ? (
+            <h1 className="flex items-center justify-center gap-3 text-4xl font-bold font-poppins text-text">
+              Consignment {displayNumber}
+              {ready && !isFulfilled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNumberDraft(formStatuses.number || "");
+                    setNumberError("");
+                  }}
+                  className="rounded-lg p-2 text-base text-text/50 hover:bg-primary/10 hover:text-primary"
+                  aria-label="Change the consignment number"
+                  title="Change the consignment number"
+                >
+                  <FaPen />
+                </button>
+              )}
+            </h1>
+          ) : (
+            <form onSubmit={saveNumber} className="mx-auto flex max-w-md flex-col items-center gap-2">
+              <label htmlFor="consignment-number" className="text-sm font-medium text-text">
+                Consignment number
+              </label>
+              <div className="flex w-full gap-2">
+                <input
+                  id="consignment-number"
+                  value={numberDraft}
+                  onChange={(e) => setNumberDraft(e.target.value)}
+                  maxLength={50}
+                  autoFocus
+                  className="w-full rounded-lg border border-primary/30 bg-background px-3 py-2 text-lg text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                <button type="submit" disabled={savingNumber} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-accent disabled:opacity-60">
+                  {savingNumber ? "Saving…" : "Save"}
+                </button>
+                <button type="button" onClick={() => setNumberDraft(null)} className="rounded-lg border border-text/15 px-4 py-2 text-sm text-text hover:bg-text/5">
+                  Cancel
+                </button>
+              </div>
+              {numberError && <p role="alert" className="text-sm text-red-600">{numberError}</p>}
+            </form>
+          )}
           <p className="text-text/70 font-inter text-lg">
             Complete all sections to finalize your consignment
           </p>
@@ -351,7 +437,7 @@ export default function StartConsignmentPage() {
 
         {/* Forms Accordion */}
         <div className="space-y-4">
-          {formsData.map((form) => {
+          {formsData.map((form, index) => {
             const FormComponent = form.component;
             const FormIcon = form.icon;
             const isSubmitted = getFormStatus(form.key);
@@ -366,7 +452,7 @@ export default function StartConsignmentPage() {
                 ref={(el) => (accordionRefs.current[form.id] = el)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: form.id * 0.1 }}
+                transition={{ duration: 0.4, delay: index * 0.06 }}
                 className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
               >
                 {/* Accordion Header */}

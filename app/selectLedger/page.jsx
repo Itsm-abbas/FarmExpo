@@ -70,7 +70,7 @@ export default function LedgerSelection() {
                 transition={{ duration: 0.3, delay: 0.2 + index * 0.1 }}
               >
                 <span className="text-lg text-gray-800 dark:text-white">
-                  Consignment #{consignment.id}
+                  Consignment {consignment.number || `#${consignment.id}`}
                 </span>
                 <motion.button
                   onClick={() => router.push(`/ledger/${consignment.id}`)}

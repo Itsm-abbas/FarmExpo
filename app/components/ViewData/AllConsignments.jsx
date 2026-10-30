@@ -40,7 +40,6 @@ export default function AllConsignments() {
     staleTime: 1000 * 60 * 5,
   });
 
-  if (error) return "An error has occurred: " + error.message;
 
   const filteredData = data?.filter((item) => {
     const itemDate = new Date(item.date);
@@ -61,6 +60,11 @@ export default function AllConsignments() {
         case "gd":
           matchesSearch = item.goodsDeclaration?.number
             ?.toLowerCase()
+            .includes(searchTerm);
+          break;
+        case "number":
+          matchesSearch = (item.number || String(item.id))
+            .toLowerCase()
             .includes(searchTerm);
           break;
         case "airwaybill":
@@ -93,7 +97,7 @@ export default function AllConsignments() {
 
     const worksheet = XLSX.utils.json_to_sheet(
       filteredData.map((item) => ({
-        "Consignment ID": item.id,
+        "Consignment No.": item.number || item.id,
         Date: Formatter.formatDate(item?.date),
         Consignee: item.consignee?.vendor.name,
         Destination: item.consignee?.vendor.address,
@@ -205,6 +209,9 @@ export default function AllConsignments() {
   const toggleMobileMenu = (id) => {
     setMobileMenuOpen(mobileMenuOpen === id ? null : id);
   };
+
+  // After every hook, so hooks always run in the same order.
+  if (error) return "An error has occurred: " + error.message;
 
   return (
     <motion.div
@@ -327,6 +334,7 @@ export default function AllConsignments() {
                     className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-background border border-primary/20 rounded-lg sm:rounded-xl text-text focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 font-inter text-sm"
                   >
                     <option value="consignee">By Consignee</option>
+                    <option value="number">By Consignment Number</option>
                     <option value="gd">By GD Number</option>
                     <option value="airwaybill">By Airway Bill</option>
                   </select>
@@ -344,6 +352,8 @@ export default function AllConsignments() {
                     placeholder={`Search by ${
                       filters.searchType === "gd"
                         ? "GD Number"
+                        : filters.searchType === "number"
+                        ? "Consignment Number"
                         : filters.searchType === "airwaybill"
                         ? "Airway Bill"
                         : "Consignee Name"
@@ -395,7 +405,7 @@ export default function AllConsignments() {
                   <thead>
                     <tr className="bg-primary text-white font-poppins">
                       {[
-                        "#",
+                        "No.",
                         "Date",
                         "Consignee",
                         "Destination",
@@ -424,7 +434,7 @@ export default function AllConsignments() {
                             className="hover:bg-primary/5 transition-colors duration-200 group"
                           >
                             <td className="px-4 py-4 font-inter text-text font-medium">
-                              {index + 1}
+                              {item.number || `#${item.id}`}
                             </td>
                             <td className="px-4 py-4 font-inter text-text">
                               {Formatter.formatDate(item?.date)}
@@ -532,7 +542,7 @@ export default function AllConsignments() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-text text-sm">
-                            #{item.id}
+                            {item.number || `#${item.id}`}
                           </h3>
                           <span
                             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(

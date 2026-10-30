@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { listQueries, useConsignment } from "@hooks/queries";
+import { useConsignment } from "@hooks/queries";
 import {
   LuArrowLeft,
   LuDownload,
@@ -54,16 +53,14 @@ export default function InvoicePage() {
   const [error, setError] = useState("");
 
   const { data: consignment, isLoading, isFetching, isError } = useConsignment(id);
-  const { data: utilizations = [], isFetching: utilizationsFetching } = useQuery(
-    listQueries.utilization
-  );
   // Files are made only from the saved figures and the organization's
-  // template, never from a copy that is still being refreshed.
-  const ready = !isFetching && !utilizationsFetching && !sessionLoading;
+  // template, never from a copy that is still being refreshed. The
+  // financial instruments come with the consignment.
+  const ready = !isFetching && !sessionLoading;
 
   const invoice = useMemo(
-    () => (consignment ? computeInvoice(consignment, utilizations) : null),
-    [consignment, utilizations]
+    () => (consignment ? computeInvoice(consignment) : null),
+    [consignment]
   );
 
   const template =
@@ -141,7 +138,8 @@ export default function InvoicePage() {
 
   const awb = invoice.airwayBill;
   const gd = invoice.goodsDeclaration;
-  const foreign = invoice.consigneeCurrency;
+  // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
+  const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
   const t = invoice.trader;
   const c = invoice.consignee;
 
@@ -151,12 +149,12 @@ export default function InvoicePage() {
         href={`/startconsignment/${invoice.id}`}
         className="inline-flex items-center gap-1.5 text-sm font-medium text-text/60 hover:text-text"
       >
-        <LuArrowLeft className="h-4 w-4" /> Consignment #{invoice.id}
+        <LuArrowLeft className="h-4 w-4" /> Consignment {invoice.number}
       </Link>
 
       <PageHeader
         title={`Invoice ${invoice.invoiceNumber}`}
-        description={`Consignment #${invoice.id}, ${formatDate(invoice.date)}`}
+        description={`Consignment ${invoice.number}, ${formatDate(invoice.date)}`}
         actions={
           <>
             <Button variant="secondary" onClick={printPdf} loading={busy === "print"} disabled={!ready}>
@@ -249,7 +247,7 @@ export default function InvoicePage() {
             <dl className="min-w-[14rem] text-sm">
               <Line label="Invoice no." value={invoice.invoiceNumber} />
               <Line label="Date" value={formatDate(invoice.date)} />
-              <Line label="Consignment" value={`#${invoice.id}`} />
+              <Line label="Consignment" value={invoice.number} />
               <Line label="Airway bill" value={awb?.number} />
             </dl>
           </div>
@@ -345,7 +343,7 @@ export default function InvoicePage() {
               <h3 className="mb-2 font-display text-base font-semibold text-gray-900">Financial instruments used</h3>
               <dl className="max-w-md">
                 {invoice.utilizations.map((u, i) => (
-                  <Line key={i} label={u.number} value={`${money(u.utilized, u.currency)} of ${money(u.amount, u.currency)}`} />
+                  <Line key={i} label={u.bank ? `${u.number} (${u.bank})` : u.number} value={`${money(u.utilized, u.currency)} of ${money(u.amount, u.currency)}`} />
                 ))}
               </dl>
             </section>

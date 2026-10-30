@@ -97,6 +97,7 @@ const ViewFI = () => {
   const headers = [
     { key: "sno", label: "#" },
     { key: "number", label: "Instrument No", accessor: "number" },
+    { key: "bankName", label: "Bank", accessor: "bankName" },
     { key: "trader", label: "Trader", accessor: "trader.name" },
     { key: "consignee", label: "Consignee", accessor: "consignee.vendor.name" },
     { key: "mode", label: "Mode", accessor: "mode" },

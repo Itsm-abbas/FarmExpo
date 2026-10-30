@@ -258,6 +258,8 @@ model GoodsDeclaration {
   date                    DateTime
   exchangeRate            Float
   commercialInvoiceNumber String
+  // Currency of FOB and freight: that of the consignment's financial instrument.
+  currency                String?
   fob                     Float
   gdFreight               Float
   r1                      Float?
@@ -376,16 +378,23 @@ model FinancialInstrument {
   @@index([organizationId])
 }
 
+// How much of a financial instrument a consignment uses. A consignment can
+// use several instruments.
 model FinancialInstrumentUtilization {
   id                    Int      @id @default(autoincrement())
   financialInstrumentId Int
-  goodsDeclarationId    Int
+  consignmentId         Int?
+  // Older records were linked through the goods declaration only.
+  goodsDeclarationId    Int?
   utilized              Float
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   financialInstrument FinancialInstrument @relation(fields: [financialInstrumentId], references: [id])
-  goodsDeclaration    GoodsDeclaration    @relation(fields: [goodsDeclarationId], references: [id])
+  consignment         Consignment?        @relation(fields: [consignmentId], references: [id])
+  goodsDeclaration    GoodsDeclaration?   @relation(fields: [goodsDeclarationId], references: [id])
+
+  @@index([consignmentId])
 }
 
 model ConsignmentItem {
@@ -416,11 +425,15 @@ model Consignment {
   packingId          Int?
   recoveryDoneId     Int?
 
+  // Entered by the user, unique within the organization.
+  number             String?
   date               DateTime
   localInvoiceWeight Float?
   dailyExpenses      Float?
   // Amount billed to the consignee for this consignment (posted to their ledger).
   consigneeAmount    Float?
+  // Taxes added to the consignment's costs: [{ remark, amount }] in the base currency.
+  taxes              Json?
   status             String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -433,9 +446,11 @@ model Consignment {
   packing          Packing?          @relation(fields: [packingId], references: [id])
   recoveryDone     RecoveryDone?     @relation(fields: [recoveryDoneId], references: [id])
 
-  goods       ConsignmentItem[]
-  Transaction Transaction[]
+  goods        ConsignmentItem[]
+  Transaction  Transaction[]
+  utilizations FinancialInstrumentUtilization[]
 
+  @@unique([organizationId, number])
   @@index([userId])
   @@index([organizationId])
 }

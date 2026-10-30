@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
@@ -18,6 +19,8 @@ import {
 export default function VendorsTransactionsPage() {
   const queryClient = useQueryClient();
   const { permissions } = useSession();
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("");
   const {
     data: vendors = [],
     isLoading,
@@ -60,6 +63,19 @@ export default function VendorsTransactionsPage() {
         confirmButtonColor: "rgb(var(--color-primary))",
       }),
   });
+
+  const ROLE_LABELS = {
+    consignee: "Consignees",
+    packer: "Packers",
+    iataAgent: "IATA agents",
+    customAgent: "Custom agents",
+    trader: "Traders & farmers",
+  };
+  const shown = vendors.filter(
+    (v) =>
+      (!role || v.role === role) &&
+      (!search.trim() || v.name.toLowerCase().includes(search.trim().toLowerCase()))
+  );
 
   const handleResync = async () => {
     const result = await Swal.fire({
@@ -185,6 +201,35 @@ export default function VendorsTransactionsPage() {
             )}
           </div>
 
+          {!isLoading && vendors.length > 0 && (
+            <div className="mb-6 grid gap-3 sm:grid-cols-[1fr_14rem]" role="search" aria-label="Search ledgers">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name"
+                aria-label="Search by name"
+                className="w-full rounded-xl border-2 border-primary/20 bg-background px-4 py-2.5 text-text placeholder:text-text/40 focus:border-primary focus:outline-none"
+              />
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                aria-label="Partner type"
+                className="w-full rounded-xl border-2 border-primary/20 bg-background px-4 py-2.5 text-text focus:border-primary focus:outline-none"
+              >
+                <option value="">All partners</option>
+                {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+              {(search || role) && (
+                <p role="status" className="text-sm text-text/60 sm:col-span-2">
+                  {shown.length} of {vendors.length} ledgers match.
+                </p>
+              )}
+            </div>
+          )}
+
           {isLoading ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {[...Array(6)].map((_, index) => (
@@ -212,7 +257,7 @@ export default function VendorsTransactionsPage() {
           ) : (
             <AnimatePresence>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {vendors.map((vendor, index) => (
+                {shown.map((vendor, index) => (
                   <motion.div
                     key={vendor.id}
                     initial={{ opacity: 0, y: 20 }}

@@ -1,7 +1,7 @@
 "use client";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
@@ -30,6 +30,42 @@ const errorText = async (res, fallback) => {
   return typeof body.error === "string" ? body.error : fallback;
 };
 
+const NO_FILTERS = { text: "", type: "", kind: "", from: "", to: "", min: "", max: "" };
+
+// The calendar day an entry was recorded, on this device ("YYYY-MM-DD").
+const entryDay = (t) => new Date(t.createdAt).toLocaleDateString("en-CA");
+
+function matchesFilters(t, f) {
+  if (f.text) {
+    const words = f.text.toLowerCase().split(/s+/).filter(Boolean);
+    const haystack = [
+      t.details,
+      t.transactionId,
+      t.voucherId,
+      t.consignment?.number,
+      t.consignmentId && `consignment ${t.consignmentId}`,
+      t.purchaseId && `purchase #${t.purchaseId} purchase ${t.purchaseId}`,
+      String(t.amount),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!words.every((w) => haystack.includes(w))) return false;
+  }
+  if (f.type && t.type !== f.type) return false;
+  if (f.kind === "manual" && t.source) return false;
+  if (f.kind === "consignment" && !(t.source && t.source !== "purchase")) return false;
+  if (f.kind === "purchase" && t.source !== "purchase") return false;
+  if (f.from && entryDay(t) < f.from) return false;
+  if (f.to && entryDay(t) > f.to) return false;
+  if (f.min !== "" && t.amount < Number(f.min)) return false;
+  if (f.max !== "" && t.amount > Number(f.max)) return false;
+  return true;
+}
+
+const filterInput =
+  "w-full rounded-lg border border-primary/20 bg-background px-3 py-2 text-sm text-text placeholder:text-text/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+
 export default function VendorTransactionPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
@@ -54,6 +90,17 @@ export default function VendorTransactionPage() {
     details: "",
     voucherId: "",
   });
+  // --- Search: every filter narrows the entries shown ---
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const filtering = Object.entries(filters).some(([key, value]) => value !== NO_FILTERS[key]);
+  const visible = useMemo(
+    () => (data?.transactions || []).filter((t) => matchesFilters(t, filters)),
+    [data, filters]
+  );
+  const visibleCredits = visible.filter((t) => t.type === "credit").reduce((s, t) => s + t.amount, 0);
+  const visibleDebits = visible.filter((t) => t.type === "debit").reduce((s, t) => s + t.amount, 0);
+  const setFilter = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
+
   const [editForm, setEditForm] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -550,6 +597,78 @@ export default function VendorTransactionPage() {
                 </button>
               </div>
             ) : (
+              <>
+              <div className="border-b border-primary/10 p-4 sm:p-5 space-y-3" role="search" aria-label="Search this ledger">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="sm:col-span-2 text-xs font-medium text-text/70">
+                    Search
+                    <input
+                      name="text"
+                      type="search"
+                      value={filters.text}
+                      onChange={setFilter}
+                      placeholder="Details, transaction or voucher ID, consignment, purchase, amount"
+                      className={`${filterInput} mt-1`}
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    Type
+                    <select name="type" value={filters.type} onChange={setFilter} className={`${filterInput} mt-1`}>
+                      <option value="">Credits and debits</option>
+                      <option value="credit">Credits only</option>
+                      <option value="debit">Debits only</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    Entry
+                    <select name="kind" value={filters.kind} onChange={setFilter} className={`${filterInput} mt-1`}>
+                      <option value="">All entries</option>
+                      <option value="manual">Added by hand</option>
+                      <option value="consignment">From consignments</option>
+                      <option value="purchase">From purchases</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    From
+                    <input name="from" type="date" value={filters.from} onChange={setFilter} className={`${filterInput} mt-1`} />
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    To
+                    <input name="to" type="date" value={filters.to} onChange={setFilter} className={`${filterInput} mt-1`} />
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    Amount from
+                    <input name="min" type="number" min="0" step="any" value={filters.min} onChange={setFilter} placeholder="0" className={`${filterInput} mt-1`} />
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    Amount to
+                    <input name="max" type="number" min="0" step="any" value={filters.max} onChange={setFilter} placeholder="Any" className={`${filterInput} mt-1`} />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm" role="status" aria-live="polite">
+                  <span className="text-text/70">
+                    {filtering
+                      ? `${visible.length} of ${data.transactions.length} entries match`
+                      : `${data.transactions.length} entries`}
+                  </span>
+                  <span className="text-text/70">
+                    Credits <strong className="text-text">{data.vendor.currency} {visibleCredits.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                  </span>
+                  <span className="text-text/70">
+                    Debits <strong className="text-text">{data.vendor.currency} {visibleDebits.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                  </span>
+                  {filtering && (
+                    <button type="button" onClick={() => setFilters(NO_FILTERS)} className="font-medium text-primary hover:underline">
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              </div>
+              {visible.length === 0 ? (
+                <p className="px-6 py-12 text-center text-text/60">
+                  No entries match this search. Change or clear the filters to see more.
+                </p>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -599,14 +718,11 @@ export default function VendorTransactionPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <AnimatePresence>
-                      {data.transactions.map((transaction, index) => (
-                        <motion.tr
+                    {/* Plain rows: search results update at once, and long
+                        ledgers don't wait on a staggered animation. */}
+                    {visible.map((transaction) => (
+                        <tr
                           key={transaction.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.3, delay: index * 0.05 }}
                           className="border-b border-primary/5 hover:bg-primary/5 transition-colors"
                         >
                           <td className="p-4 text-text">
@@ -634,7 +750,7 @@ export default function VendorTransactionPage() {
                                 href={`/startconsignment/${transaction.consignmentId}`}
                                 className="text-primary hover:text-accent underline font-medium"
                               >
-                                Consignment #{transaction.consignmentId}
+                                Consignment {transaction.consignment?.number || `#${transaction.consignmentId}`}
                               </Link>
                             ) : transaction.purchaseId ? (
                               <Link
@@ -727,12 +843,13 @@ export default function VendorTransactionPage() {
                             </div>
                             )}
                           </td>
-                        </motion.tr>
+                        </tr>
                       ))}
-                    </AnimatePresence>
                   </tbody>
                 </table>
               </div>
+              )}
+              </>
             )}
           </motion.div>
         )}

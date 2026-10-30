@@ -9,14 +9,12 @@ import withReactContent from "sweetalert2-react-content";
 import SaveButton from "@components/Button/SaveButton";
 import Input from "@components/Input";
 import { motion } from "framer-motion";
-import FIU from "./Fiu";
 import { getCookie } from "cookies-next";
 import {
   FaFileInvoice,
   FaExchangeAlt,
   FaMoneyBill,
   FaCalendarAlt,
-  FaChartLine,
 } from "react-icons/fa";
 
 const MySwal = withReactContent(Swal);
@@ -31,10 +29,20 @@ export default function GoodsDeclarationForm({
 }) {
   const token = getCookie("token");
   const { currency: baseCurrency } = useSession();
-  // FOB, freight and realizations are in the export invoice currency.
-  const invoiceCurrency =
-    formStatus?.consignee?.vendor?.currency || "foreign currency";
+  // FOB and freight are in the currency of the financial instruments chosen
+  // above (if they differ, one of them is picked). Without any, the
+  // consignee's currency is used.
+  const fiCurrencies = [
+    ...new Set(
+      (formStatus?.utilizations || [])
+        .map((u) => u.financialInstrument?.currency)
+        .filter(Boolean)
+    ),
+  ];
+  const fallbackCurrency =
+    existingData?.currency || formStatus?.consignee?.vendor?.currency || "";
   const [formData, setFormData] = useState({
+    currency: "",
     number: "",
     date: "",
     exchangeRate: "",
@@ -53,8 +61,15 @@ export default function GoodsDeclarationForm({
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showFinancialUtilization, setShowFinancialUtilization] =
-    useState(false);
+
+  const gdCurrency = fiCurrencies.length
+    ? fiCurrencies.includes(formData.currency)
+      ? formData.currency
+      : fiCurrencies.includes(existingData?.currency)
+        ? existingData.currency
+        : fiCurrencies[0]
+    : fallbackCurrency;
+  const invoiceCurrency = gdCurrency || "foreign currency";
 
   useEffect(() => {
     if (existingData) {
@@ -143,6 +158,7 @@ export default function GoodsDeclarationForm({
         date: formData.date,
         exchangeRate: parseFloat(formData.exchangeRate),
         commercialInvoiceNumber: formData.commercialInvoiceNumber,
+        currency: gdCurrency || null,
         fob: parseFloat(formData.fob),
         gdFreight: parseFloat(formData.gdFreight),
         r1: formData.r1 ? parseFloat(formData.r1) : null,
@@ -172,16 +188,14 @@ export default function GoodsDeclarationForm({
 
       if (!existingData) {
         await UpdateConsignment(consignmentId, {
-          goodsDeclaration: { id: result.id, ...formData },
+          goodsDeclaration: { id: result.id },
         });
       }
 
       setFormStatuses((prev) => ({
         ...prev,
-        goodsDeclaration: { id: result.id, ...formData },
+        goodsDeclaration: result,
       }));
-
-      setShowFinancialUtilization(true);
 
       MySwal.fire({
         icon: "success",
@@ -236,8 +250,7 @@ export default function GoodsDeclarationForm({
       transition={{ duration: 0.5 }}
       className="w-full max-w-4xl mx-auto"
     >
-      {!showFinancialUtilization ? (
-        <div className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden">
+      <div className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-6 border-b border-primary/20">
             <div className="flex items-center space-x-3">
@@ -269,6 +282,36 @@ export default function GoodsDeclarationForm({
               </motion.div>
             )}
 
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-inter text-text">
+              {fiCurrencies.length > 1 ? (
+                <label className="flex flex-wrap items-center gap-3">
+                  <span className="font-medium">Declaration currency</span>
+                  <select
+                    value={gdCurrency}
+                    onChange={(e) => handleInputChange("currency", e.target.value)}
+                    disabled={isLocked}
+                    className="rounded-lg border border-primary/20 bg-background px-3 py-1.5"
+                  >
+                    {fiCurrencies.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <span className="text-text/60">from the financial instruments above</span>
+                </label>
+              ) : fiCurrencies.length === 1 ? (
+                <p>
+                  Declaration currency: <strong>{gdCurrency}</strong>, from the financial
+                  instrument above.
+                </p>
+              ) : (
+                <p>
+                  No financial instrument is added yet, so the declaration uses{" "}
+                  <strong>{gdCurrency || "the consignee's currency"}</strong>. Add the financial
+                  instrument in the section above to use its currency.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Information */}
               <div className="space-y-4">
@@ -295,7 +338,7 @@ export default function GoodsDeclarationForm({
                 <Input
                   type="number"
                   step="0.01"
-                  label={`Exchange rate (${baseCurrency} per 1 ${formStatus?.consignee?.vendor?.currency || "unit"})`}
+                  label={`Exchange rate (${baseCurrency} per 1 ${gdCurrency || "unit"})`}
                   value={formData.exchangeRate}
                   onChange={(e) =>
                     handleInputChange("exchangeRate", e.target.value)
@@ -358,7 +401,7 @@ export default function GoodsDeclarationForm({
                       Total Declared Value
                     </h4>
                     <p className="text-2xl font-bold text-text">
-                      {formatMoney(totalValue, formStatus?.consignee?.vendor?.currency, { decimals: 2 })}
+                      {formatMoney(totalValue, gdCurrency, { decimals: 2 })}
                     </p>
                     <p className="text-xs text-text/60 mt-1">
                       FOB + GD Freight
@@ -412,15 +455,6 @@ export default function GoodsDeclarationForm({
                 existingData={!!existingData}
                 disabled={isLocked}
               />
-
-              <button
-                onClick={() => setShowFinancialUtilization(true)}
-                disabled={isLocked}
-                className="flex items-center justify-center gap-2 px-6 py-3 bg-accent text-white font-poppins font-medium rounded-xl hover:bg-accent/90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-              >
-                <FaChartLine />
-                Add Financial Utilization
-              </button>
             </div>
 
             {isLocked && (
@@ -430,13 +464,6 @@ export default function GoodsDeclarationForm({
             )}
           </div>
         </div>
-      ) : (
-        <FIU
-          setShowFinancialUtilization={setShowFinancialUtilization}
-          formStatus={formStatus}
-          isLocked={isLocked}
-        />
-      )}
     </motion.div>
   );
 }

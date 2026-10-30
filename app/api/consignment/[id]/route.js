@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@lib/prisma";
 import { removeConsignmentLedger, syncConsignmentLedger } from "@lib/ledger";
 import { CONSIGNMENT_INCLUDE, consignmentData } from "@lib/consignments";
+import { releaseConsignmentInstruments } from "@lib/financialInstruments";
 import {
   TX_OPTIONS,
   findOwned,
@@ -24,6 +25,7 @@ export const GET = withUser(async (req, { user, params }) => {
 
 // Body keys that change what the consignment posts to vendor ledgers.
 const LEDGER_KEYS = [
+  "number", // appears in the ledger entries' details
   "consignee",
   "consigneeAmount",
   "airwayBill",
@@ -82,6 +84,8 @@ export const DELETE = withUser(async (req, { user, params }) => {
 
   await prisma.$transaction(async (tx) => {
     await removeConsignmentLedger(tx, id);
+    // Give the utilized amounts back to their financial instruments.
+    await releaseConsignmentInstruments(tx, id);
     await tx.consignmentItem.deleteMany({ where: { consignmentId: id } });
     await tx.consignment.delete({ where: { id } });
 
@@ -92,7 +96,7 @@ export const DELETE = withUser(async (req, { user, params }) => {
 
     const gdId = consignment.goodsDeclarationId;
     if (gdId && !(await tx.consignment.count({ where: { goodsDeclarationId: gdId } }))) {
-      // Give the utilized amounts back to their financial instruments.
+      // Older utilizations linked only through the goods declaration.
       const utilizations = await tx.financialInstrumentUtilization.findMany({
         where: { goodsDeclarationId: gdId },
       });

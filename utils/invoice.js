@@ -60,14 +60,29 @@ export function computeInvoice(consignment, utilizations = []) {
     },
     { key: "customClearance", label: "Custom clearance", amount: num(c.customClearance?.fee) },
     { key: "dailyExpenses", label: "Daily expenses", amount: num(c.dailyExpenses) },
+    // Taxes added on the consignment page, each with its own remark.
+    ...(Array.isArray(c.taxes) ? c.taxes : []).map((tax, i) => ({
+      key: `tax-${i}`,
+      label: tax.remark || "Tax",
+      detail: "Tax",
+      tax: true,
+      amount: num(tax.amount),
+    })),
   ];
   const totalCost = costs.reduce((total, row) => total + row.amount, 0);
 
   const recoveryLocal = num(recovery?.amount) * num(recovery?.exchangeRate);
 
+  // Instruments the consignment uses; older data linked them via the GD.
+  const used = Array.isArray(c.utilizations)
+    ? c.utilizations
+    : (utilizations || []).filter((u) => gd && u.goodsDeclarationId === gd.id);
+
   return {
     id: c.id,
-    invoiceNumber: gd?.commercialInvoiceNumber || `CONS-${c.id}`,
+    // The consignment number the user entered (older consignments: the id).
+    number: c.number || String(c.id),
+    invoiceNumber: gd?.commercialInvoiceNumber || `CONS-${c.number || c.id}`,
     date: c.date,
     status: c.status,
     trader: c.trader || null,
@@ -90,6 +105,7 @@ export function computeInvoice(consignment, utilizations = []) {
           number: gd.number,
           date: gd.date,
           exchangeRate: num(gd.exchangeRate),
+          currency: gd.currency || "",
           fob: num(gd.fob),
           freight: num(gd.gdFreight),
           cfr: num(gd.fob) + num(gd.gdFreight),
@@ -122,10 +138,11 @@ export function computeInvoice(consignment, utilizations = []) {
       : null,
     // Recovered (converted) minus all costs; negative is a loss.
     result: recoveryLocal - totalCost,
-    utilizations: (utilizations || [])
-      .filter((u) => gd && u.goodsDeclarationId === gd.id)
-      .map((u) => ({
+    taxes: costs.filter((row) => row.tax),
+    totalTaxes: costs.filter((row) => row.tax).reduce((total, row) => total + row.amount, 0),
+    utilizations: used.map((u) => ({
         number: u.financialInstrument?.number || "",
+        bank: u.financialInstrument?.bankName || "",
         currency: u.financialInstrument?.currency || "",
         amount: num(u.financialInstrument?.amount),
         utilized: num(u.utilized),

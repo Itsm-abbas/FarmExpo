@@ -30,6 +30,7 @@ export default function FinancialInstrumentForm() {
 
   const [formData, setFormData] = useState({
     number: "",
+    bankName: "",
     traderId: "",
     mode: "",
     consigneeId: "",
@@ -78,6 +79,7 @@ export default function FinancialInstrumentForm() {
       if (!id) {
         setFormData({
           number: "",
+          bankName: "",
           traderId: "",
           mode: "",
           consigneeId: "",
@@ -116,6 +118,7 @@ export default function FinancialInstrumentForm() {
 
     if (
       !formData.number ||
+      !formData.bankName?.trim() ||
       !formData.traderId ||
       !formData.consigneeId ||
       !formData.currency
@@ -279,6 +282,19 @@ export default function FinancialInstrumentForm() {
                   }
                   disabled={mutation.isPending}
                   label="Instrument Number"
+                  required
+                />
+
+                <Input
+                  id="bankName"
+                  type="text"
+                  placeholder="Bank that issued the instrument"
+                  value={formData.bankName || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, bankName: e.target.value })
+                  }
+                  disabled={mutation.isPending}
+                  label="Bank Name"
                   required
                 />
 

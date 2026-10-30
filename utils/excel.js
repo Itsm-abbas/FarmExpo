@@ -194,7 +194,8 @@ const orgSubtitle = (org) =>
 
 export function exportInvoiceExcel({ invoice, organization, currency, includeCosts = true, filename }) {
   const b = new SheetBuilder([6, 24, 16, 10, 12, 14, 14, 16, 18], organization?.brandColor);
-  const foreign = invoice.consigneeCurrency;
+  // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
+  const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
   const t = invoice.trader;
   const c = invoice.consignee;
 
@@ -203,7 +204,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
   b.pairs([
     ["Commercial invoice", invoice.invoiceNumber],
     ["Date", formatDate(invoice.date)],
-    ["Consignment", `#${invoice.id}`],
+    ["Consignment", invoice.number],
     ["Status", invoice.status || ""],
   ]);
 
@@ -260,6 +261,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
     b.table(
       [
         { header: "Instrument", key: "number", total: "Total" },
+        { header: "Bank", key: "bank" },
         { header: "Currency", key: "currency" },
         { header: "Amount", key: "amount", format: MONEY },
         { header: "Utilized", key: "utilized", format: MONEY, total: "sum" },
@@ -341,7 +343,7 @@ export function exportStatementExcel({ vendor, transactions, organization, filen
       { header: "Transaction", key: "transactionId" },
       { header: "Voucher", key: "voucherId" },
       { header: "Details", key: (t) => t.details || "", total: "Totals" },
-      { header: "Consignment", key: (t) => (t.consignmentId ? `#${t.consignmentId}` : "") },
+      { header: "Consignment", key: (t) => (t.consignmentId ? t.consignment?.number || `#${t.consignmentId}` : "") },
       { header: `Credit (${currency})`, key: (t) => (t.type === "credit" ? t.amount : ""), format: MONEY, total: "sum" },
       { header: `Debit (${currency})`, key: (t) => (t.type === "debit" ? t.amount : ""), format: MONEY, total: "sum" },
       { header: `Balance (${currency})`, key: "balanceAfter", format: MONEY, total: vendor.balance || 0 },

@@ -48,8 +48,12 @@ const Input = ({
     return DateIcon ? "left-12" : "left-4";
   };
 
-  const hasValue = Boolean(value);
-  const shouldLabelFloat = isFocused || hasValue;
+  // 0 is a value too (e.g. an opening balance of 0).
+  const hasValue = value !== undefined && value !== null && value !== "";
+  // Date and time fields always show their own "mm/dd/yyyy" text, so their
+  // label stays above the field instead of sitting on top of it.
+  const showsOwnFormat = ["date", "time", "datetime-local", "month", "week"].includes(type);
+  const shouldLabelFloat = isFocused || hasValue || showsOwnFormat;
 
   // For date inputs, we need special handling to show native placeholder
   const showDatePlaceholder = isDateType && !value && !isFocused;
@@ -96,11 +100,9 @@ const Input = ({
             absolute ${getLabelLeftPosition()} pointer-events-none transition-all duration-200 font-medium
             ${getTextColor()} ${disabled ? "opacity-50" : ""} origin-left
           `}
-          initial={{
-            top: "50%",
-            y: "-50%",
-            fontSize: "16px",
-          }}
+          // Starts where it belongs (no slide on page load); moves only
+          // when the field is focused or filled in.
+          initial={false}
           animate={{
             top: shouldLabelFloat ? "8px" : "50%",
             y: shouldLabelFloat ? "-80%" : "-50%",

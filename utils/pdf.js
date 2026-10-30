@@ -539,13 +539,14 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
   const pdf = new PdfBuilder({ organization, branding, template });
   const awb = invoice.airwayBill;
   const gd = invoice.goodsDeclaration;
-  const foreign = invoice.consigneeCurrency;
+  // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
+  const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
 
   pdf.header();
   pdf.titleBlock("Commercial invoice", [
     ["Invoice no.", invoice.invoiceNumber],
     ["Date", formatDate(invoice.date)],
-    ["Consignment", `#${invoice.id}`],
+    ["Consignment", invoice.number],
     ...(awb?.number ? [["Airway bill", awb.number]] : []),
   ]);
 
@@ -627,15 +628,16 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
   if (invoice.utilizations.length) {
     pdf.sectionTitle("Financial instruments used", pdf.tableHeight(invoice.utilizations.length));
     pdf.table({
-      head: ["Instrument", "Amount", "Utilized", "Balance", "Expiry"],
+      head: ["Instrument", "Bank", "Amount", "Utilized", "Balance", "Expiry"],
       body: invoice.utilizations.map((u) => [
         u.number,
+        u.bank,
         money(u.amount, u.currency),
         money(u.utilized, u.currency),
         money(u.balance, u.currency),
         formatDate(u.expiry),
       ]),
-      columnStyles: { 1: right, 2: right, 3: right },
+      columnStyles: { 2: right, 3: right, 4: right },
       keepTogether: true,
     });
   }
@@ -702,7 +704,7 @@ export async function buildStatementPdf({ vendor, transactions, organization, br
         formatDate(t.createdAt),
         clean([t.transactionId, t.voucherId]).join("\n"),
         t.details || "",
-        t.consignmentId ? `#${t.consignmentId}` : "",
+        t.consignmentId ? t.consignment?.number || `#${t.consignmentId}` : "",
         t.type === "credit" ? money(t.amount) : "",
         t.type === "debit" ? money(t.amount) : "",
         money(t.balanceAfter),

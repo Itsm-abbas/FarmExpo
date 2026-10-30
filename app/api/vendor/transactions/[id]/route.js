@@ -21,6 +21,7 @@ export const GET = withUser(async (req, { user, params }) => {
       consignment: {
         select: {
           id: true,
+          number: true,
           date: true,
           status: true,
         },

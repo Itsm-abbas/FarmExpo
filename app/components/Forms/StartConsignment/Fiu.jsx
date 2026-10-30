@@ -1,219 +1,163 @@
 "use client";
 
-import { formatMoney } from "@utils/money";
-import SaveButton from "@components/Button/SaveButton";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
+import { FaChartLine, FaFileInvoice, FaPlus, FaTrash } from "react-icons/fa";
+import SaveButton from "@components/Button/SaveButton";
 import Input from "@components/Input";
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchFinancialInstrument, fetchFiu } from "@constants/consignmentAPI";
 import axiosInstance from "@utils/axiosConfig";
-import {
-  FaArrowLeft,
-  FaPlus,
-  FaTrash,
-  FaMoneyBill,
-  FaFileInvoice,
-  FaChartLine,
-} from "react-icons/fa";
-import { useRouter } from "next/navigation";
+import { formatMoney } from "@utils/money";
+import { listQueries, queryKeys } from "@hooks/queries";
 
 const MySwal = withReactContent(Swal);
+const swalTheme = {
+  background: "rgb(var(--color-background))",
+  color: "rgb(var(--color-text))",
+  confirmButtonColor: "rgb(var(--color-primary))",
+};
 
-const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
+const emptyRow = () => ({ financialInstrumentId: "", utilized: "" });
+
+// The financial instruments (LC, contract…) a consignment uses, and how much
+// of each. A consignment can use several. Their currency becomes the goods
+// declaration's currency.
+export default function FinancialInstrumentsForm({
+  consignmentId,
+  formStatus,
+  setFormStatuses,
+  isLocked = false,
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [utilizations, setUtilizations] = useState([]);
-  const [error, setError] = useState("");
+  const saved = formStatus?.utilizations || [];
 
-  const { data: FiData = [], isLoading: FiLoading } = useQuery({
-    queryKey: ["financialInstruments"],
-    queryFn: fetchFinancialInstrument,
-  });
+  const [rows, setRows] = useState(() =>
+    saved.length
+      ? saved.map((u) => ({
+          financialInstrumentId: String(u.financialInstrumentId),
+          utilized: String(u.utilized),
+        }))
+      : [emptyRow()]
+  );
 
-  const { data: FiuData = [] } = useQuery({
-    queryKey: ["utilization"],
-    queryFn: fetchFiu,
-  });
+  const { data: instruments = [], isLoading } = useQuery(listQueries.financialInstruments);
 
-  // Prepare the form with existing data
-  useEffect(() => {
-    if (!formStatus.goodsDeclaration?.id || !FiuData.length || FiLoading)
-      return;
+  // What this consignment already uses is given back when it saves, so it
+  // counts as available.
+  const usedHere = (fiId) =>
+    saved
+      .filter((u) => u.financialInstrumentId === fiId)
+      .reduce((sum, u) => sum + u.utilized, 0);
+  const available = (fi) => (fi ? fi.balance + usedHere(fi.id) : 0);
 
-    const existing = FiuData.filter(
-      (fiu) => fiu.goodsDeclaration?.id === formStatus.goodsDeclaration.id
-    );
+  // Instruments for this consignment's trader or consignee are listed first.
+  const traderId = formStatus?.trader?.id;
+  const consigneeId = formStatus?.consignee?.id;
+  const matches = (fi) =>
+    (traderId && fi.traderId === traderId) || (consigneeId && fi.consigneeId === consigneeId);
+  const options = [...instruments].sort((a, b) => Number(matches(b)) - Number(matches(a)));
 
-    if (existing.length) {
-      const mapped = existing.map((u) => ({
-        id: u.id,
-        financialInstrumentId: u.financialInstrument?.id || "",
-        utilized: u.utilized || "",
-        instrument: u.financialInstrument,
-      }));
+  const instrumentOf = (row) =>
+    instruments.find((fi) => fi.id === Number(row.financialInstrumentId));
 
-      setUtilizations((prev) => {
-        const isSame = JSON.stringify(prev) === JSON.stringify(mapped);
-        return isSame ? prev : mapped;
-      });
-    } else {
-      setUtilizations([{ financialInstrumentId: "", utilized: "" }]);
-    }
-  }, [formStatus.goodsDeclaration?.id, FiuData, FiLoading]);
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      await Promise.all(
-        utilizations.map(async (u) => {
-          const selectedFi = FiData.find(
-            (fi) => fi.id === Number(u.financialInstrumentId)
-          );
-          if (!selectedFi) return;
-
-          const payload = {
-            financialInstrument: selectedFi,
-            goodsDeclaration: formStatus.goodsDeclaration,
-            utilized: Number(u.utilized),
-          };
-
-          if (u.id) {
-            await axiosInstance.put(`/utilization/${u.id}`, payload);
-          } else {
-            await axiosInstance.post("/utilization", payload);
-          }
+  const save = useMutation({
+    mutationFn: async (list) =>
+      (
+        await axiosInstance.put(`/consignment/${consignmentId}/financial-instruments`, {
+          instruments: list,
         })
-      );
-    },
-    onSuccess: () => {
+      ).data,
+    onSuccess: (consignment) => {
+      setFormStatuses(() => consignment);
+      queryClient.invalidateQueries({ queryKey: queryKeys.financialInstruments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.utilization });
       MySwal.fire({
+        ...swalTheme,
         icon: "success",
-        title: "Success!",
-        text: "Financial utilization saved successfully.",
+        title: "Saved",
+        text: consignment.utilizations.length
+          ? "Financial instruments saved. Their balances are updated."
+          : "Financial instruments removed from this consignment.",
         showConfirmButton: false,
-        timer: 2000,
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
+        timer: 1800,
         iconColor: "rgb(var(--color-primary))",
       });
-      queryClient.invalidateQueries({ queryKey: ["financialInstruments"] });
-      queryClient.invalidateQueries({ queryKey: ["utilization"] });
     },
-    onError: (err) => {
-      setError(err?.response?.data?.error || err.message);
-      MySwal.fire({
-        icon: "error",
-        title: "Error",
-        text: err?.response?.data?.error || err.message,
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-        confirmButtonColor: "rgb(var(--color-primary))",
-      });
-    },
+    onError: (error) =>
+      MySwal.fire({ ...swalTheme, icon: "error", title: "Couldn't save", text: error.message }),
   });
 
   const handleSubmit = () => {
-    if (!formStatus.goodsDeclaration?.id) {
-      return MySwal.fire({
-        icon: "warning",
-        title: "Missing Goods Declaration",
-        text: "Goods declaration is required before adding financial utilization.",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-        confirmButtonColor: "rgb(var(--color-primary))",
-      });
-    }
-
     if (isLocked) {
       return MySwal.fire({
+        ...swalTheme,
         icon: "warning",
-        title: "Form Locked",
-        text: "This consignment is fulfilled. Please contact administrator to make changes.",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-        confirmButtonColor: "rgb(var(--color-primary))",
+        title: "Form locked",
+        text: "This consignment is fulfilled. Please contact an administrator to make changes.",
       });
     }
-
-    if (
-      utilizations.some(
-        (u) =>
-          !u.financialInstrumentId ||
-          isNaN(u.utilized) ||
-          Number(u.utilized) <= 0
-      )
-    ) {
+    // A blank last row is ignored, so "Save" with no rows removes them all.
+    const filled = rows.filter((r) => r.financialInstrumentId || r.utilized);
+    const invalid = filled.find(
+      (r) => !r.financialInstrumentId || !(Number(r.utilized) > 0)
+    );
+    if (invalid) {
       return MySwal.fire({
+        ...swalTheme,
         icon: "warning",
-        title: "Invalid Data",
-        text: "Please fill all fields with valid amounts greater than 0.",
-        background: "rgb(var(--color-background))",
-        color: "rgb(var(--color-text))",
-        confirmButtonColor: "rgb(var(--color-primary))",
+        title: "Check the amounts",
+        text: "Choose an instrument and enter an amount more than 0 on every row.",
       });
     }
-
-    mutation.mutate();
+    const over = filled.find((r) => Number(r.utilized) > available(instrumentOf(r)) + 0.000001);
+    if (over) {
+      const fi = instrumentOf(over);
+      return MySwal.fire({
+        ...swalTheme,
+        icon: "warning",
+        title: "Not enough balance",
+        text: `${fi.number} has ${formatMoney(available(fi), fi.currency, { decimals: 2 })} available.`,
+      });
+    }
+    save.mutate(
+      filled.map((r) => ({
+        financialInstrumentId: Number(r.financialInstrumentId),
+        utilized: Number(r.utilized),
+      }))
+    );
   };
 
-  const handleFiChange = (index, id) => {
-    if (id === "add-new-financial-instrument") {
+  const update = (index, field, value) => {
+    if (field === "financialInstrumentId" && value === "add-new") {
       router.push("/consignment/add-financialinstrument");
       return;
     }
-    const updated = [...utilizations];
-    updated[index].financialInstrumentId = id;
+    setRows((current) => current.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  };
 
-    // Auto-populate instrument details if available
-    const selectedFi = FiData.find((fi) => fi.id === Number(id));
-    if (selectedFi) {
-      updated[index].instrument = selectedFi;
+  const chosenIds = rows.map((r) => Number(r.financialInstrumentId));
+  // Totals per currency: instruments may be in different currencies.
+  const totals = rows.reduce((acc, r) => {
+    const fi = instrumentOf(r);
+    if (fi && Number(r.utilized) > 0) {
+      acc[fi.currency || ""] = (acc[fi.currency || ""] || 0) + Number(r.utilized);
     }
-
-    setUtilizations(updated);
-  };
-
-  const handleUtilizedChange = (index, val) => {
-    const updated = [...utilizations];
-    updated[index].utilized = val;
-    setUtilizations(updated);
-  };
-
-  const addNew = () => {
-    if (isLocked) return;
-    setUtilizations([
-      ...utilizations,
-      { financialInstrumentId: "", utilized: "" },
-    ]);
-  };
-
-  const removeUtilization = (index) => {
-    if (isLocked) return;
-    const updated = utilizations.filter((_, i) => i !== index);
-    setUtilizations(updated);
-  };
-
-  const selectedIds = utilizations.map((u) => Number(u.financialInstrumentId));
-  const hasEmptyRow = utilizations.some(
-    (u) => !u.financialInstrumentId || !u.utilized
-  );
-
-  const totalUtilized = utilizations.reduce(
-    (sum, u) => sum + (parseFloat(u.utilized) || 0),
-    0
-  );
+    return acc;
+  }, {});
+  const currencies = Object.keys(totals);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.4 }}
       className="w-full max-w-4xl mx-auto"
     >
       <div className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden">
-        {/* Header */}
         <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-6 border-b border-primary/20">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-primary/20 rounded-lg">
@@ -221,77 +165,52 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
             </div>
             <div>
               <h2 className="text-2xl font-bold font-poppins text-text">
-                Financial Instrument Utilization
+                Financial Instruments
               </h2>
               <p className="text-text/70 font-inter mt-1">
-                Allocate financial instruments to this goods declaration
+                Add one or more instruments and the amount of each this consignment uses.
+                The goods declaration uses their currency.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Form Content */}
-        <div className="p-6 space-y-6">
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-red-500/10 border border-red-500/20 rounded-xl p-4"
-            >
-              <p className="text-red-500 text-sm font-inter">{error}</p>
-            </motion.div>
+        <div className="p-6 space-y-5">
+          {currencies.length > 1 && (
+            <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-text">
+              These instruments are in different currencies ({currencies.join(", ")}). The goods
+              declaration can only use one of them.
+            </p>
           )}
 
-          {/* Total Utilization Summary */}
-          {totalUtilized > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-primary/5 rounded-xl p-4 border border-primary/20"
-            >
-              <h4 className="font-semibold text-text font-poppins mb-2 flex items-center gap-2">
-                <FaMoneyBill className="text-primary" />
-                Utilization Summary
-              </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm font-inter">
-                <div>
-                  <p className="text-text/70">Total Utilized</p>
-                  <p className="text-2xl font-bold text-text font-poppins">
-                    {totalUtilized.toFixed(2)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-text/70">Number of Instruments</p>
-                  <p className="text-2xl font-bold text-text font-poppins">
-                    {utilizations.filter((u) => u.financialInstrumentId).length}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Utilization Forms */}
-          <div className="space-y-4">
-            <AnimatePresence>
-              {utilizations.map((util, index) => (
+          <AnimatePresence initial={false}>
+            {rows.map((row, index) => {
+              const fi = instrumentOf(row);
+              const tooMuch = fi && Number(row.utilized) > available(fi) + 0.000001;
+              return (
                 <motion.div
                   key={index}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3 }}
-                  className="bg-background rounded-xl border border-primary/20 p-4 space-y-4"
+                  exit={{ opacity: 0, y: -8 }}
+                  className="rounded-xl border border-primary/20 p-4 space-y-4"
                 >
                   <div className="flex items-center justify-between">
                     <h4 className="font-semibold text-text font-poppins flex items-center gap-2">
                       <FaFileInvoice className="text-primary text-sm" />
-                      Instrument #{index + 1}
+                      Instrument {index + 1}
                     </h4>
-                    {utilizations.length > 1 && !isLocked && (
+                    {!isLocked && (rows.length > 1 || row.financialInstrumentId) && (
                       <button
-                        onClick={() => removeUtilization(index)}
+                        type="button"
+                        onClick={() =>
+                          setRows((current) =>
+                            current.length > 1 ? current.filter((_, i) => i !== index) : [emptyRow()]
+                          )
+                        }
                         className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="Remove instrument"
+                        aria-label={`Remove instrument ${index + 1}`}
+                        title="Remove"
                       >
                         <FaTrash size={14} />
                       </button>
@@ -299,124 +218,86 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Financial Instrument Selection */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-text font-poppins">
-                        Financial Instrument *
+                    <div className="space-y-1.5">
+                      <label htmlFor={`fi-${index}`} className="block text-sm font-medium text-text font-poppins">
+                        Financial instrument *
                       </label>
                       <select
-                        value={util.financialInstrumentId || ""}
-                        onChange={(e) => handleFiChange(index, e.target.value)}
-                        disabled={isLocked || FiLoading}
-                        className="w-full px-4 py-3 bg-background border border-primary/20 rounded-xl text-text placeholder-text/50 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 font-inter disabled:opacity-50 disabled:cursor-not-allowed"
+                        id={`fi-${index}`}
+                        value={row.financialInstrumentId}
+                        onChange={(e) => update(index, "financialInstrumentId", e.target.value)}
+                        disabled={isLocked || isLoading}
+                        className="w-full px-4 py-3 bg-background border border-primary/20 rounded-xl text-text focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 font-inter disabled:opacity-50"
                       >
-                        <option value="" className="text-text/50">
-                          {FiLoading
-                            ? "Loading instruments..."
-                            : "Select Financial Instrument"}
-                        </option>
-                        {FiData.map((fi) => (
+                        <option value="">{isLoading ? "Loading instruments…" : "Choose an instrument"}</option>
+                        {options.map((option) => (
                           <option
-                            key={fi.id}
-                            value={fi.id}
-                            disabled={
-                              selectedIds.includes(fi.id) &&
-                              fi.id !== Number(util.financialInstrumentId)
-                            }
-                            className="text-text bg-background"
+                            key={option.id}
+                            value={option.id}
+                            disabled={chosenIds.includes(option.id) && option.id !== Number(row.financialInstrumentId)}
                           >
-                            {fi.number}, balance {formatMoney(fi.balance, fi.currency)}
+                            {option.number}
+                            {option.bankName ? ` · ${option.bankName}` : ""} · {formatMoney(available(option), option.currency)} available
                           </option>
                         ))}
-                        <option
-                          value="add-new-financial-instrument"
-                          className="text-primary font-semibold bg-primary/10 cursor-pointer"
-                        >
-                          + Add New Financial Instrument
-                        </option>
+                        <option value="add-new">+ Add a new financial instrument</option>
                       </select>
-
-                      {/* Instrument Details */}
-                      {util.instrument && (
-                        <div className="text-xs text-text/60 font-inter mt-1">
-                          Trader: {util.instrument.trader?.name} | Consignee:{" "}
-                          {util.instrument.consignee?.vendor?.name}
-                        </div>
+                      {fi && (
+                        <p className="text-xs text-text/60 font-inter">
+                          {[fi.mode, fi.trader?.name && `Trader: ${fi.trader.name}`, fi.consignee?.vendor?.name && `Consignee: ${fi.consignee.vendor.name}`]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
                       )}
                     </div>
 
-                    {/* Utilized Amount */}
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Input
+                        id={`utilized-${index}`}
                         type="number"
-                        placeholder="Enter utilized amount"
-                        value={util.utilized}
-                        onChange={(e) =>
-                          handleUtilizedChange(index, e.target.value)
-                        }
-                        label={`Utilized amount${util.instrument?.currency ? ` (${util.instrument.currency})` : ""} *`}
-                        disabled={isLocked}
                         min="0"
                         step="0.01"
-                        icon={FaMoneyBill}
-                        helpertext={
-                          util.instrument
-                            ? `Available: ${formatMoney(util.instrument.balance, util.instrument.currency)}`
-                            : ""
-                        }
+                        value={row.utilized}
+                        onChange={(e) => update(index, "utilized", e.target.value)}
+                        label={`Amount used${fi?.currency ? ` (${fi.currency})` : ""} *`}
+                        placeholder="Enter the amount used"
+                        disabled={isLocked}
                       />
+                      {fi && (
+                        <p className={`text-xs font-inter ${tooMuch ? "text-red-600" : "text-text/60"}`}>
+                          {tooMuch ? "More than the " : ""}
+                          {formatMoney(available(fi), fi.currency, { decimals: 2 })} available
+                        </p>
+                      )}
                     </div>
                   </div>
-
-                  {/* Balance Warning */}
-                  {util.instrument &&
-                    util.utilized &&
-                    parseFloat(util.utilized) > util.instrument.balance && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                        <p className="text-red-500 text-sm font-inter">
-                          ⚠️ Utilized amount ({util.utilized}) exceeds available
-                          balance ({util.instrument.balance})
-                        </p>
-                      </div>
-                    )}
                 </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
+              );
+            })}
+          </AnimatePresence>
 
-          {/* Add Another Button */}
           {!isLocked && (
-            <motion.button
-              onClick={addNew}
-              disabled={hasEmptyRow}
-              whileHover={!hasEmptyRow ? { scale: 1.02 } : {}}
-              whileTap={!hasEmptyRow ? { scale: 0.98 } : {}}
-              className={`w-full py-3 rounded-xl font-poppins font-medium transition-all duration-200 flex items-center justify-center gap-2  ${
-                hasEmptyRow
-                  ? "bg-gray-400 cursor-not-allowed text-white"
-                  : "bg-secondary hover:bg-secondary/90 text-white shadow-lg"
-              }`}
+            <button
+              type="button"
+              onClick={() => setRows((current) => [...current, emptyRow()])}
+              disabled={rows.some((r) => !r.financialInstrumentId)}
+              className="w-full py-3 rounded-xl border border-dashed border-primary/40 text-primary font-poppins font-medium flex items-center justify-center gap-2 hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <FaPlus />
-              Add Another Instrument
-            </motion.button>
+              <FaPlus /> Add another instrument
+            </button>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-col  gap-4 pt-4 border-t border-primary/10">
-            <SaveButton
-              handleSubmit={handleSubmit}
-              isLoading={mutation.isPending}
-              disabled={isLocked}
-            />
+          {currencies.length > 0 && (
+            <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-sm font-inter">
+              <p className="text-text/70">Total used</p>
+              <p className="mt-1 text-xl font-bold text-text font-poppins">
+                {currencies.map((c) => formatMoney(totals[c], c, { decimals: 2 })).join(" + ")}
+              </p>
+            </div>
+          )}
 
-            <button
-              onClick={() => setShowFinancialUtilization(false)}
-              className="flex items-center justify-center gap-2 px-6 py-3 border border-primary/20 text-text font-poppins font-medium rounded-xl hover:bg-primary/5 transition-all duration-200"
-            >
-              <FaArrowLeft />
-              Back to Goods Declaration
-            </button>
+          <div className="pt-4 border-t border-primary/10">
+            <SaveButton handleSubmit={handleSubmit} isLoading={save.isPending} disabled={isLocked} />
           </div>
 
           {isLocked && (
@@ -428,6 +309,4 @@ const FIU = ({ setShowFinancialUtilization, formStatus, isLocked = false }) => {
       </div>
     </motion.div>
   );
-};
-
-export default FIU;
+}

@@ -320,7 +320,7 @@ export default function ItemSelectionPage() {
             Select Items
           </h1>
           <p className="text-text/60 text-lg">
-            Choose items for your consignment #{id}
+            Choose items for consignment {consignment?.number || `#${id}`}
           </p>
         </motion.div>
 
