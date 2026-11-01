@@ -192,17 +192,21 @@ function save(builder, sheetName, filename) {
 const orgSubtitle = (org) =>
   [org?.address, org?.ntn && `NTN ${org.ntn}`, org?.phone, org?.email].filter(Boolean).join("   ");
 
-export function exportInvoiceExcel({ invoice, organization, currency, includeCosts = true, filename }) {
+// The local invoice, or with `commercial` (from computeCommercialInvoice) the
+// commercial invoice: selling rates and the consignee's account, without
+// purchase rates, airway bill charges, instruments or costs.
+export function exportInvoiceExcel({ invoice, organization, currency, includeCosts = true, commercial = null, filename }) {
   const b = new SheetBuilder([6, 24, 16, 10, 12, 14, 14, 16, 18], organization?.brandColor);
   // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
   const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
+  const goodsCurrency = commercial ? commercial.currency : currency;
   const t = invoice.trader;
   const c = invoice.consignee;
 
   b.title(organization?.name || "FarmExpo", orgSubtitle(organization));
   b.blank();
   b.pairs([
-    ["Commercial invoice", invoice.invoiceNumber],
+    [commercial ? "Commercial invoice" : "Local invoice", invoice.invoiceNumber],
     ["Date", formatDate(invoice.date)],
     ["Consignment", invoice.number],
     ["Status", invoice.status || ""],
@@ -224,7 +228,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
   const gd = invoice.goodsDeclaration;
   if (awb || gd) {
     b.section("Shipment");
-    b.pairs([
+    const shipment = [
       ["Airway bill", awb?.number || ""],
       ["Goods declaration", gd?.number || ""],
       ["IATA agent", [awb?.agent, awb?.station].filter(Boolean).join(", ")],
@@ -233,11 +237,19 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       [`FOB (${foreign})`, gd ? gd.fob : ""],
       ["Chargeable weight", awb ? awb.weight : "", KG],
       [`Freight (${foreign})`, gd ? gd.freight : ""],
-      [`Rate / kg (${currency})`, awb ? awb.rate : ""],
-      [`CFR (${foreign})`, gd ? gd.cfr : ""],
-      [`Agent fee (${currency})`, awb ? awb.fee : ""],
-      [`Exchange rate (${currency} per ${foreign || "unit"})`, gd ? gd.exchangeRate : "", "0.0000"],
-    ]);
+    ];
+    // Airway bill charges and the exchange rate are internal.
+    b.pairs(
+      commercial
+        ? [...shipment, [`CFR (${foreign})`, gd ? gd.cfr : ""]]
+        : [
+            ...shipment,
+            [`Rate / kg (${currency})`, awb ? awb.rate : ""],
+            [`CFR (${foreign})`, gd ? gd.cfr : ""],
+            [`Agent fee (${currency})`, awb ? awb.fee : ""],
+            [`Exchange rate (${currency} per ${foreign || "unit"})`, gd ? gd.exchangeRate : "", "0.0000"],
+          ]
+    );
   }
 
   b.section("Goods");
@@ -250,13 +262,24 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       { header: "Kg / unit", key: "netPerUnit", format: KG },
       { header: "Net kg", key: "netWeight", format: KG, total: "sum" },
       { header: "Gross kg", key: "grossWeight", format: KG, total: "sum" },
-      { header: `Rate / kg (${currency})`, key: "ratePerKg", format: MONEY },
-      { header: `Amount (${currency})`, key: "goodsCost", format: MONEY, total: "sum" },
+      { header: `Rate / kg (${goodsCurrency})`, key: commercial ? "rate" : "ratePerKg", format: MONEY },
+      { header: `Amount (${goodsCurrency})`, key: commercial ? "amount" : "goodsCost", format: MONEY, total: "sum" },
     ],
-    invoice.goods
+    commercial ? commercial.goods : invoice.goods
   );
 
-  if (invoice.utilizations.length) {
+  const account = commercial?.account;
+  if (account) {
+    b.section(`Account of ${account.name} (${account.currency})`);
+    b.pairs([
+      ["Previous balance", account.previousBalance],
+      ["Current bill (this invoice)", account.currentBill],
+      ["Total bill", account.totalBill],
+      [`Outstanding as of ${formatDate(new Date())}`, account.outstanding],
+    ]);
+  }
+
+  if (!commercial && invoice.utilizations.length) {
     b.section("Financial instruments used");
     b.table(
       [
@@ -272,7 +295,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
     );
   }
 
-  if (includeCosts) {
+  if (!commercial && includeCosts) {
     b.section(`Costs and result (${currency})`);
     const rows = invoice.costs.map((row) => ({ label: row.label, basis: row.detail || "", amount: row.amount }));
     const totalRow = b.table(

@@ -52,7 +52,8 @@ model Organization {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  users User[]
+  users        User[]
+  bankAccounts BankAccount[]
 }
 
 model User {
@@ -162,11 +163,47 @@ model Transaction {
   // ("airwayBill" | "customClearance" | "packing" | "consignee" | "recovery")
   // or a purchase ("purchase"). Null for entries added manually on the ledger page.
   source        String?
+  // The organization's bank account the money went through (manual entries
+  // only), the direction on the bank's side: "in" (received) or "out"
+  // (paid), and the amount in the bank account's currency (differs from
+  // `amount` when the vendor's ledger is kept in another currency).
+  bankAccountId Int?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  bankType      String?
+  bankAmount    Float?
   createdAt     DateTime     @default(now())
 
   @@index([vendorId])
   @@index([consignmentId])
   @@index([purchaseId])
+  @@index([bankAccountId])
+}
+
+// One of the organization's own bank accounts, entered by hand. Its balance
+// is openingBalance + money in - money out over the ledger entries recorded
+// through it, computed when read (lib/banking.js).
+model BankAccount {
+  id             Int           @id @default(autoincrement())
+  userId         Int?
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  bankName       String
+  accountTitle   String
+  accountNumber  String
+  iban           String?
+  branch         String?
+  swift          String?
+  currency       String
+  openingBalance Float         @default(0)
+  notes          String?
+  // Closed accounts keep their history but take no new entries.
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  transactions Transaction[]
+
+  @@index([organizationId])
 }
 
 // Produce bought from a trader or farmer. Each purchase posts what we owe
@@ -407,6 +444,9 @@ model ConsignmentItem {
   packagingPerUnitCost Float
   quantity             Int
   damage               Int
+  // Selling rate per kg on the commercial invoice, in the consignment's
+  // commercialCurrency. (commodityPerUnitCost is the purchase rate.)
+  saleRate             Float?
 
   consignment   Consignment @relation(fields: [consignmentId], references: [id])
   commodityItem Commodity   @relation(fields: [commodityItemId], references: [id])
@@ -434,7 +474,9 @@ model Consignment {
   consigneeAmount    Float?
   // Taxes added to the consignment's costs: [{ remark, amount }] in the base currency.
   taxes              Json?
-  status             String?
+  // Currency of the commercial invoice's rates (default: the consignee's).
+  commercialCurrency String?
+  status            String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

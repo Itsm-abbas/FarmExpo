@@ -38,6 +38,8 @@ export function computeInvoice(consignment, utilizations = []) {
       goodsCost: netWeight * ratePerKg,
       packagingPerUnit: num(g.packagingPerUnitCost),
       packagingCost: quantity * num(g.packagingPerUnitCost),
+      // Selling rate for the commercial invoice (null until it is set).
+      saleRate: g.saleRate === null || g.saleRate === undefined ? null : num(g.saleRate),
     };
   });
   const sum = (key) => goods.reduce((total, g) => total + g[key], 0);
@@ -89,6 +91,7 @@ export function computeInvoice(consignment, utilizations = []) {
     consignee: c.consignee?.vendor || null,
     consigneeCurrency: c.consignee?.vendor?.currency || "",
     consigneeAmount: num(c.consigneeAmount),
+    commercialCurrency: c.commercialCurrency || "",
     airwayBill: awb
       ? {
           number: awb.number,
@@ -150,6 +153,44 @@ export function computeInvoice(consignment, utilizations = []) {
         expiry: u.financialInstrument?.expiryDate || null,
       })),
   };
+}
+
+const round2 = (n) => Math.round(num(n) * 100) / 100;
+const sameCode = (a, b) => (a || "").trim().toUpperCase() === (b || "").trim().toUpperCase();
+
+// Currency the commercial invoice is made out in: the one saved with it, else
+// the consignee's, else the goods declaration's, else the base currency.
+export function defaultCommercialCurrency(invoice, baseCurrency) {
+  return (
+    invoice.commercialCurrency ||
+    invoice.consigneeCurrency ||
+    invoice.goodsDeclaration?.currency ||
+    baseCurrency
+  );
+}
+
+// A starting selling rate for an item that has none yet: the purchase rate,
+// converted at the goods declaration's exchange rate when that is in
+// `currency`. Null when it can't be converted.
+export function suggestedSaleRate(good, invoice, currency, baseCurrency) {
+  if (sameCode(currency, baseCurrency)) return good.ratePerKg;
+  const gd = invoice.goodsDeclaration;
+  if (gd?.exchangeRate > 0 && sameCode(gd.currency, currency)) {
+    return Math.round((good.ratePerKg / gd.exchangeRate) * 10000) / 10000;
+  }
+  return null;
+}
+
+// What the commercial invoice shows: the goods at their selling rates in
+// `currency` (no purchase rates, costs or financial instruments), and the
+// consignee's account. `rates` maps item id -> rate per kg.
+export function computeCommercialInvoice(invoice, { currency, rates = {}, account = null }) {
+  const goods = invoice.goods.map((g) => {
+    const rate = num(rates[g.id]);
+    return { ...g, rate, amount: round2(g.netWeight * rate) };
+  });
+  const total = round2(goods.reduce((s, g) => s + g.amount, 0));
+  return { currency, goods, total, account };
 }
 
 export const formatDate = (value) =>

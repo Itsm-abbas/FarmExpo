@@ -535,15 +535,23 @@ const generatedNote = () => `Generated ${formatDate(new Date())}`;
 // ---------------------------------------------------------------------------
 // Documents
 
-export async function buildInvoicePdf({ invoice, organization, branding, currency, includeCosts = true, template }) {
+// The local invoice (purchase rates, instruments, costs and result), or with
+// `commercial` (from computeCommercialInvoice) the commercial invoice: selling
+// rates in its currency and the consignee's account, nothing internal.
+export async function buildInvoicePdf({ invoice, organization, branding, currency, includeCosts = true, commercial = null, template }) {
   const pdf = new PdfBuilder({ organization, branding, template });
   const awb = invoice.airwayBill;
   const gd = invoice.goodsDeclaration;
   // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
   const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
+  const goodsCurrency = commercial ? commercial.currency : currency;
+  const goodsRows = commercial
+    ? commercial.goods
+    : invoice.goods.map((g) => ({ ...g, rate: g.ratePerKg, amount: g.goodsCost }));
+  const goodsTotal = commercial ? commercial.total : invoice.totals.goodsCost;
 
   pdf.header();
-  pdf.titleBlock("Commercial invoice", [
+  pdf.titleBlock(commercial ? "Commercial invoice" : "Local invoice", [
     ["Invoice no.", invoice.invoiceNumber],
     ["Date", formatDate(invoice.date)],
     ["Consignment", invoice.number],
@@ -580,9 +588,11 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       ["GD date", formatDate(gd.date)],
       ["FOB", money(gd.fob, foreign)],
       ["Freight", money(gd.freight, foreign)],
-      ["CFR", money(gd.cfr, foreign)],
-      ["Exchange rate", gd.exchangeRate ? `${currency} ${gd.exchangeRate} per ${foreign || "unit"}` : ""]
+      ["CFR", money(gd.cfr, foreign)]
     );
+    if (!commercial) {
+      shipment.push(["Exchange rate", gd.exchangeRate ? `${currency} ${gd.exchangeRate} per ${foreign || "unit"}` : ""]);
+    }
   }
   if (shipment.length) {
     pdf.sectionTitle("Shipment", Math.ceil(shipment.length / 2) * 5.5);
@@ -591,8 +601,8 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
 
   pdf.sectionTitle("Goods", pdf.tableHeight(Math.min(invoice.goods.length, 3)));
   pdf.table({
-    head: ["#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${currency})`, `Amount (${currency})`],
-    body: invoice.goods.map((g) => [
+    head: ["#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${goodsCurrency})`, `Amount (${goodsCurrency})`],
+    body: goodsRows.map((g) => [
       g.index,
       g.name,
       g.packaging,
@@ -600,8 +610,8 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       g.netPerUnit.toLocaleString("en-US"),
       g.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       g.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
-      money(g.ratePerKg),
-      money(g.goodsCost),
+      money(g.rate),
+      money(g.amount),
     ]),
     foot: [
       "",
@@ -612,7 +622,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       invoice.totals.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       invoice.totals.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       "",
-      money(invoice.totals.goodsCost),
+      money(goodsTotal),
     ],
     columnStyles: {
       0: { cellWidth: 10, halign: "right" },
@@ -625,7 +635,23 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     },
   });
 
-  if (invoice.utilizations.length) {
+  const account = commercial?.account;
+  if (account) {
+    pdf.sectionTitle(`Account of ${account.name}`, pdf.tableHeight(4));
+    pdf.table({
+      head: ["", `Amount (${account.currency})`],
+      body: [
+        ["Previous balance", money(account.previousBalance)],
+        ["Current bill (this invoice)", money(account.currentBill)],
+        [{ content: "Total bill", styles: { fontStyle: "bold" } }, { content: money(account.totalBill), styles: { fontStyle: "bold" } }],
+      ],
+      foot: [`Outstanding balance as of ${formatDate(new Date())}`, money(account.outstanding)],
+      columnStyles: { 0: { cellWidth: 80 }, 1: { ...right, cellWidth: 45 } },
+      keepTogether: true,
+    });
+  }
+
+  if (!commercial && invoice.utilizations.length) {
     pdf.sectionTitle("Financial instruments used", pdf.tableHeight(invoice.utilizations.length));
     pdf.table({
       head: ["Instrument", "Bank", "Amount", "Utilized", "Balance", "Expiry"],
@@ -642,7 +668,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     });
   }
 
-  if (includeCosts) {
+  if (!commercial && includeCosts) {
     pdf.sectionTitle("Costs and result", pdf.tableHeight(invoice.costs.length + 3));
     const rec = invoice.recovery;
     pdf.table({

@@ -1,6 +1,7 @@
 // app/api/vendor/transactions/[id]/route.js — `id` is the vendor id.
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
+import { ROLE_SELECT, withRole } from "@lib/parties";
 import { findOwned, ownedBy, parseId, withUser } from "@lib/session";
 
 export const GET = withUser(async (req, { user, params }) => {
@@ -12,6 +13,7 @@ export const GET = withUser(async (req, { user, params }) => {
       balance: true,
       openingBalance: true,
       currency: true,
+      ...ROLE_SELECT,
     },
   });
 
@@ -27,9 +29,12 @@ export const GET = withUser(async (req, { user, params }) => {
         },
       },
       purchase: { select: { id: true, date: true } },
+      bankAccount: {
+        select: { id: true, bankName: true, accountNumber: true, currency: true },
+      },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
-  return NextResponse.json({ vendor, transactions });
+  return NextResponse.json({ vendor: withRole(vendor), transactions });
 });

@@ -8,6 +8,11 @@ import axiosInstance from "@utils/axiosConfig";
 export const queryKeys = {
   consignments: ["consignments"],
   consignment: (id) => ["consignment", Number(id)],
+  // The consignee's account on a consignment's commercial invoice.
+  consignmentAccount: (id) => ["consignmentAccount", Number(id)],
+  bankAccounts: ["bankAccounts"],
+  // Org-wide list on the Transactions page: ["transactions", { filters }].
+  transactions: ["transactions"],
   traders: ["traders"],
   consignees: ["consignees"],
   packers: ["packers"],
@@ -37,6 +42,8 @@ export const listQueries = {
   packaging: { queryKey: queryKeys.packaging, queryFn: get("/packaging") },
   financialInstruments: { queryKey: queryKeys.financialInstruments, queryFn: get("/financialinstrument") },
   utilization: { queryKey: queryKeys.utilization, queryFn: get("/utilization") },
+  bankAccounts: { queryKey: queryKeys.bankAccounts, queryFn: get("/bank-accounts") },
+  vendors: { queryKey: queryKeys.vendors, queryFn: get("/vendors/transactions") },
 };
 
 export const consignmentQuery = (id) => ({
@@ -65,7 +72,13 @@ export function useConsignment(id) {
 // is that consignment: the page that changed it keeps its copy, and the next
 // page to open it (the invoice, say) fetches the saved version.
 export function markConsignmentChanged(queryClient, id) {
-  const keys = [queryKeys.consignments, queryKeys.vendors, queryKeys.vendorTransactions];
+  const keys = [
+    queryKeys.consignments,
+    queryKeys.vendors,
+    queryKeys.vendorTransactions,
+    queryKeys.transactions,
+    ["consignmentAccount"],
+  ];
   if (id) keys.push(queryKeys.consignment(id));
   for (const queryKey of keys) {
     queryClient.invalidateQueries({ queryKey, refetchType: "none" });
@@ -79,6 +92,20 @@ export function markPurchasesChanged(queryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.dailyPrices });
   for (const queryKey of [queryKeys.traders, queryKeys.vendors, queryKeys.vendorTransactions]) {
     queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+  }
+}
+
+// After a manual ledger entry is added, changed or removed: ledgers, bank
+// balances, the transactions list and consignees' invoice accounts.
+export function markLedgerChanged(queryClient) {
+  for (const queryKey of [
+    queryKeys.vendors,
+    queryKeys.vendorTransactions,
+    queryKeys.bankAccounts,
+    queryKeys.transactions,
+    ["consignmentAccount"],
+  ]) {
+    queryClient.invalidateQueries({ queryKey });
   }
 }
 

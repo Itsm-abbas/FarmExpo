@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { deleteCookie } from "cookies-next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  LuArrowLeftRight,
   LuBookOpen,
   LuBoxes,
   LuBuilding2,
@@ -24,6 +25,7 @@ import {
   LuStamp,
   LuUser,
   LuUserCog,
+  LuWallet,
   LuWarehouse,
   LuX,
 } from "react-icons/lu";
@@ -81,6 +83,8 @@ const NAV = [
         icon: LuLandmark,
         match: ["/consignment/view-financial-instrument", "/consignment/add-financialinstrument"],
       },
+      { label: "Banking", href: "/banking", icon: LuWallet },
+      { label: "Transactions", href: "/transactions", icon: LuArrowLeftRight },
     ],
   },
   {

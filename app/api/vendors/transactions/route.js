@@ -2,9 +2,7 @@
 import prisma from "@lib/prisma";
 import { NextResponse } from "next/server";
 import { ownedBy, withUser } from "@lib/session";
-
-// What a vendor is to the organization, by which role table points at it.
-const ROLES = ["consignee", "packer", "iataAgent", "customAgent"];
+import { ROLE_SELECT, withRole } from "@lib/parties";
 
 export const GET = withUser(async (req, { user }) => {
   const vendors = await prisma.vendor.findMany({
@@ -15,23 +13,10 @@ export const GET = withUser(async (req, { user }) => {
       balance: true,
       currency: true,
       _count: { select: { transactions: true } },
-      ...Object.fromEntries(
-        ROLES.map((role) => [role, { select: { id: true }, take: 1 }])
-      ),
-      // A trader/farmer we buy from (one account per trader).
-      trader: { select: { id: true } },
+      ...ROLE_SELECT,
     },
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(
-    vendors.map((vendor) => {
-      const role =
-        ROLES.find((r) => vendor[r].length) || (vendor.trader ? "trader" : null);
-      const rest = { ...vendor };
-      ROLES.forEach((r) => delete rest[r]);
-      delete rest.trader;
-      return { ...rest, role };
-    })
-  );
+  return NextResponse.json(vendors.map(withRole));
 });

@@ -19,11 +19,14 @@ import {
   FaFileInvoice,
   FaFilePdf,
   FaFileExcel,
+  FaUniversity,
 } from "react-icons/fa";
 
 import DataLoader from "@components/Loader/dataLoader";
 import Loading from "app/loading";
 import useSession from "@hooks/useSession";
+import { listQueries, markLedgerChanged } from "@hooks/queries";
+import { bankLabel, bankTypeFor, sameCurrency } from "@utils/banking";
 
 const errorText = async (res, fallback) => {
   const body = await res.json().catch(() => ({}));
@@ -66,6 +69,81 @@ function matchesFilters(t, f) {
 const filterInput =
   "w-full rounded-lg border border-primary/20 bg-background px-3 py-2 text-sm text-text placeholder:text-text/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
+const modalInput =
+  "w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none";
+
+// The bank account an entry's money went through, if any. Money in or out
+// follows the entry's type and the vendor's role until it is changed.
+function BankFields({ value, onChange, vendor, bankAccounts }) {
+  const bank = bankAccounts.find((b) => String(b.id) === String(value.bankAccountId || ""));
+  const direction = value.bankType || bankTypeFor(vendor.role, value.type);
+  const otherCurrency = bank && !sameCurrency(bank.currency, vendor.currency);
+  // Closed accounts are offered only to the entry already using one.
+  const options = bankAccounts.filter((b) => b.active || b.id === bank?.id);
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={bank ? "" : "md:col-span-2"}>
+        <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+          <FaUniversity className="text-primary/60" />
+          Bank account
+        </label>
+        <select
+          value={value.bankAccountId || ""}
+          onChange={(e) => onChange({ bankAccountId: e.target.value, bankType: "", bankAmount: "" })}
+          className={modalInput}
+        >
+          <option value="">Not through a bank (cash)</option>
+          {options.map((b) => (
+            <option key={b.id} value={b.id}>
+              {bankLabel(b)} ({b.currency})
+            </option>
+          ))}
+        </select>
+      </div>
+      {bank && (
+        <div>
+          <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+            In or out of the bank
+          </label>
+          <select
+            value={direction}
+            onChange={(e) => onChange({ bankType: e.target.value })}
+            className={modalInput}
+          >
+            <option value="in">Money in (received)</option>
+            <option value="out">Money out (paid)</option>
+          </select>
+        </div>
+      )}
+      {otherCurrency && (
+        <div className="md:col-span-2">
+          <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
+            Amount in the bank ({bank.currency})
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={value.bankAmount ?? ""}
+            onChange={(e) => onChange({ bankAmount: e.target.value })}
+            placeholder={`The ledger is in ${vendor.currency}`}
+            className={modalInput}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Request fields for the bank side of an entry.
+const bankPayload = (value, vendor) =>
+  value.bankAccountId
+    ? {
+        bankAccountId: Number(value.bankAccountId),
+        bankType: value.bankType || bankTypeFor(vendor.role, value.type),
+        bankAmount: value.bankAmount === "" ? null : value.bankAmount,
+      }
+    : { bankAccountId: null, bankType: null, bankAmount: null };
+
 export default function VendorTransactionPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
@@ -81,6 +159,7 @@ export default function VendorTransactionPage() {
       return res.json();
     },
   });
+  const { data: bankAccounts = [] } = useQuery(listQueries.bankAccounts);
 
   // --- Form States ---
   const [form, setForm] = useState({
@@ -89,6 +168,9 @@ export default function VendorTransactionPage() {
     amount: "",
     details: "",
     voucherId: "",
+    bankAccountId: "",
+    bankType: "",
+    bankAmount: "",
   });
   // --- Search: every filter narrows the entries shown ---
   const [filters, setFilters] = useState(NO_FILTERS);
@@ -164,8 +246,7 @@ export default function VendorTransactionPage() {
         throw new Error(await errorText(res, "Failed to add transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
-      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
+      markLedgerChanged(queryClient);
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -181,6 +262,9 @@ export default function VendorTransactionPage() {
         amount: "",
         details: "",
         voucherId: "",
+        bankAccountId: "",
+        bankType: "",
+        bankAmount: "",
       });
       setShowAddForm(false);
     },
@@ -207,8 +291,7 @@ export default function VendorTransactionPage() {
         throw new Error(await errorText(res, "Failed to update transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
-      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
+      markLedgerChanged(queryClient);
       setShowEdit(false);
       setEditForm(null);
       Swal.fire({
@@ -244,8 +327,7 @@ export default function VendorTransactionPage() {
         throw new Error(await errorText(res, "Failed to delete transaction"));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendorTransactions", id] });
-      queryClient.invalidateQueries({ queryKey: ["vendors-list"], refetchType: "none" });
+      markLedgerChanged(queryClient);
       Swal.fire({
         position: "top-center",
         icon: "success",
@@ -282,7 +364,7 @@ export default function VendorTransactionPage() {
         color: "rgb(var(--color-text))",
       });
     }
-    addMutation.mutate({ ...form, vendorId: Number(id) });
+    addMutation.mutate({ ...form, ...bankPayload(form, data.vendor), vendorId: Number(id) });
   };
 
   const handleEditSubmit = (e) => {
@@ -298,7 +380,7 @@ export default function VendorTransactionPage() {
         color: "rgb(var(--color-text))",
       });
     }
-    editMutation.mutate({ ...editForm });
+    editMutation.mutate({ ...editForm, ...bankPayload(editForm, data.vendor) });
   };
 
   const handleDelete = (tid) => {
@@ -519,6 +601,15 @@ export default function VendorTransactionPage() {
                         className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
                       />
                     </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <BankFields
+                      value={form}
+                      onChange={(patch) => setForm({ ...form, ...patch })}
+                      vendor={data.vendor}
+                      bankAccounts={bankAccounts}
+                    />
                   </div>
 
                   <div className="mb-6">
@@ -743,6 +834,18 @@ export default function VendorTransactionPage() {
                           </td>
                           <td className="p-4 text-text max-w-xs">
                             {transaction.details}
+                            {transaction.bankAccount && (
+                              <Link
+                                href={`/banking/${transaction.bankAccount.id}`}
+                                className="mt-1 flex items-center gap-1.5 text-xs text-text/60 hover:text-primary"
+                              >
+                                <FaUniversity className="shrink-0" />
+                                {transaction.bankType === "out" ? "Paid from" : "Received into"}{" "}
+                                {bankLabel(transaction.bankAccount)}
+                                {!sameCurrency(transaction.bankAccount.currency, data.vendor.currency) &&
+                                  ` (${transaction.bankAccount.currency} ${Number(transaction.bankAmount).toLocaleString()})`}
+                              </Link>
+                            )}
                           </td>
                           <td className="p-4">
                             {transaction.consignmentId ? (
@@ -964,6 +1067,13 @@ export default function VendorTransactionPage() {
                         className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
                       />
                     </div>
+
+                    <BankFields
+                      value={editForm}
+                      onChange={(patch) => setEditForm({ ...editForm, ...patch })}
+                      vendor={data.vendor}
+                      bankAccounts={bankAccounts}
+                    />
                   </div>
 
                   <div className="flex justify-end gap-3">
