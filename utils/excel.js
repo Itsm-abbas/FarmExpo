@@ -2,7 +2,7 @@
 // formats), totals are SUM formulas, and layout is tracked as rows are added,
 // so sections never drift out of place.
 import XLSX from "xlsx-js-style";
-import { formatDate } from "@utils/invoice";
+import { entryNote, formatDate } from "@utils/invoice";
 import { formatDay } from "@utils/days";
 
 const MONEY = "#,##0.00";
@@ -365,7 +365,7 @@ export function exportStatementExcel({ vendor, transactions, organization, filen
       { header: "Date", key: (t) => formatDate(t.createdAt) },
       { header: "Transaction", key: "transactionId" },
       { header: "Voucher", key: "voucherId" },
-      { header: "Details", key: (t) => t.details || "", total: "Totals" },
+      { header: "Note", key: entryNote, total: "Totals" },
       { header: "Consignment", key: (t) => (t.consignmentId ? t.consignment?.number || `#${t.consignmentId}` : "") },
       { header: `Credit (${currency})`, key: (t) => (t.type === "credit" ? t.amount : ""), format: MONEY, total: "sum" },
       { header: `Debit (${currency})`, key: (t) => (t.type === "debit" ? t.amount : ""), format: MONEY, total: "sum" },

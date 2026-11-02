@@ -31,6 +31,7 @@ export default function CustomClearance({
   const router = useRouter();
   const { currency: baseCurrency } = useSession();
   const [fee, setFee] = useState("");
+  const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedCustomAgent, setSelectedCustomAgent] = useState(null);
   const [error, setError] = useState("");
@@ -44,6 +45,7 @@ export default function CustomClearance({
     if (existingData) {
       setSelectedCustomAgent(existingData?.customAgent);
       setFee(existingData?.fee);
+      setNote(existingData?.note || "");
     }
   }, [existingData]);
 
@@ -79,6 +81,7 @@ export default function CustomClearance({
       const payload = {
         ca: selectedCustomAgent,
         fee: parseFloat(fee),
+        note,
       };
 
       // The API posts the fee to the custom agent's ledger once the clearance
@@ -301,6 +304,17 @@ export default function CustomClearance({
               icon={FaMoneyBill}
               helpertext="Enter the custom clearance fee amount"
               required
+            />
+
+            <Input
+              id="note"
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional"
+              label="Note (shown on the statement)"
+              disabled={isLocked}
+              maxLength={500}
             />
           </div>
 

@@ -28,6 +28,7 @@ const LEDGER_KEYS = [
   "number", // appears in the ledger entries' details
   "consignee",
   "consigneeAmount",
+  "consigneeNote",
   "airwayBill",
   "customClearance",
   "packing",

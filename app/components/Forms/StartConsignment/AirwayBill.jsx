@@ -46,6 +46,7 @@ export default function AirwayBill({
     fee: "",
     date: new Date().toISOString().split("T")[0],
     selectedIataAgent: null,
+    note: "",
   });
 
   const [submitLoading, setIsSubmitLoading] = useState(false);
@@ -102,6 +103,7 @@ export default function AirwayBill({
         rate: parseFloat(formData.rate),
         airwayBillWeight: parseFloat(formData.airwayBillWeight),
         fee: parseFloat(formData.fee),
+        note: formData.note,
       };
 
       // The API posts rate x weight + fee to the IATA agent's ledger once the
@@ -161,6 +163,7 @@ export default function AirwayBill({
         airwayBillWeight: existingData.airwayBillWeight || "",
         fee: existingData.fee || "",
         selectedIataAgent: existingData.iataAgent || null,
+        note: existingData.note || "",
         date: existingData.dateTime
           ? moment(existingData.dateTime).format("YYYY-MM-DD")
           : new Date().toISOString().split("T")[0],
@@ -365,6 +368,17 @@ export default function AirwayBill({
               step="0.01"
               icon={FaMoneyBill}
               required
+            />
+
+            <Input
+              id="note"
+              type="text"
+              value={formData.note}
+              onChange={(e) => handleInputChange("note", e.target.value)}
+              placeholder="Optional"
+              label="Note (shown on the statement)"
+              disabled={isLocked}
+              maxLength={500}
             />
 
             {/* Summary Card */}

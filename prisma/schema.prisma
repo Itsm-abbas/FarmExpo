@@ -155,7 +155,10 @@ model Transaction {
   transactionId String
   type          String // "credit" or "debit"
   amount        Float
+  // Generated text for posted entries; what was typed for manual ones.
   details       String?
+  // For posted entries: the note typed on the record they came from.
+  note          String?
   createdBy     Int? // user who created this
   balanceAfter  Float // vendor balance immediately after this txn
   consignmentId Int?
@@ -326,6 +329,7 @@ model Packing {
   organizationId Int?
   packerId       Int
   ratePerKg      Float
+  note           String?
   totalCost      Float?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -344,6 +348,7 @@ model RecoveryDone {
   amount         Float
   currency       String
   exchangeRate   Float
+  note           String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   consignments   Consignment[]
@@ -362,6 +367,7 @@ model AirwayBill {
   rate             Float
   airwayBillWeight Float
   fee              Float
+  note             String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -379,6 +385,7 @@ model CustomClearance {
   organizationId Int?
   customAgentId  Int
   fee            Float
+  note           String?
   totalCost      Float?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -475,6 +482,8 @@ model Consignment {
   dailyExpenses      Float?
   // Amount billed to the consignee for this consignment (posted to their ledger).
   consigneeAmount    Float?
+  // Note typed with that amount, shown on the consignee's statement.
+  consigneeNote      String?
   // Taxes added to the consignment's costs: [{ remark, amount }] in the base currency.
   taxes              Json?
   // Currency of the commercial invoice's rates (default: the consignee's).

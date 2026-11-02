@@ -35,6 +35,7 @@ export default function RecoveryDoneForm({
     amount: "",
     currency: "",
     exchangeRate: "",
+    note: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const token = getCookie("token");
@@ -56,7 +57,8 @@ export default function RecoveryDoneForm({
       existingData &&
       formData.amount === existingData.amount &&
       formData.currency === existingData.currency &&
-      formData.exchangeRate === existingData.exchangeRate
+      formData.exchangeRate === existingData.exchangeRate &&
+      (formData.note || "") === (existingData.note || "")
     ) {
       MySwal.fire({
         icon: "info",
@@ -262,6 +264,18 @@ export default function RecoveryDoneForm({
               placeholder="Enter exchange rate"
               icon={FaExchangeAlt}
               min="0"
+            />
+
+            <Input
+              id="note"
+              label="Note (shown on the statement)"
+              value={formData.note || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, note: e.target.value })
+              }
+              type="text"
+              placeholder="Optional"
+              maxLength={500}
             />
           </div>
 

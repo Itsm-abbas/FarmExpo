@@ -34,6 +34,7 @@ const Packing = ({
   const { currency: baseCurrency } = useSession();
   const token = getCookie("token");
   const [ratePerKg, setRatePerKg] = useState("");
+  const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPacker, setSelectedPacker] = useState(null);
   const [totalPackingCost, setTotalPackingCost] = useState(0);
@@ -69,6 +70,7 @@ const Packing = ({
     if (existingData) {
       setSelectedPacker(existingData.packer);
       setRatePerKg(existingData.ratePerKg);
+      setNote(existingData.note || "");
     }
   }, [existingData]);
 
@@ -115,6 +117,7 @@ const Packing = ({
         packer: selectedPacker,
         ratePerKg,
         totalCost: totalPackingCost,
+        note,
       };
 
       const url = existingData
@@ -325,6 +328,17 @@ const Packing = ({
               placeholder="Enter rate per kg"
             />
           </div>
+
+          <Input
+            id="note"
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional"
+            label="Note (shown on the statement)"
+            disabled={isLocked}
+            maxLength={500}
+          />
 
           {/* Packing Calculation */}
           {formStatus?.airwayBill?.airwayBillWeight ? (

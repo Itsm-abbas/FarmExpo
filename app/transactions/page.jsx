@@ -124,7 +124,7 @@ function TransactionsPage() {
     if (needsBankAmount && !(Number(form.bankAmount) > 0)) {
       return setMessage({ tone: "error", text: `Enter the amount in ${bank.currency} that went through the bank.` });
     }
-    if (!form.details.trim()) return setMessage({ tone: "error", text: "Add a few words of detail." });
+    if (!form.details.trim()) return setMessage({ tone: "error", text: "Add a short note." });
     save.mutate({
       ...(isExpense ? { expenseHead: expenseName } : { vendorId: party.id }),
       type: ledgerType,
@@ -267,7 +267,7 @@ function TransactionsPage() {
             <Field label="Voucher ID" htmlFor="voucherId">
               <input id="voucherId" name="voucherId" maxLength={100} value={form.voucherId} onChange={update} className={inputClass} />
             </Field>
-            <Field label="Details" htmlFor="details" className="sm:col-span-2">
+            <Field label="Note" htmlFor="details" className="sm:col-span-2" hint="Shown on the statement.">
               <input id="details" name="details" maxLength={500} placeholder="e.g. Advance against consignment 1042" value={form.details} onChange={update} className={inputClass} />
             </Field>
           </div>

@@ -43,6 +43,7 @@ function matchesFilters(t, f) {
     const words = f.text.toLowerCase().split(/s+/).filter(Boolean);
     const haystack = [
       t.details,
+      t.note,
       t.transactionId,
       t.voucherId,
       t.consignment?.number,
@@ -358,7 +359,7 @@ export default function VendorTransactionPage() {
         position: "top-center",
         icon: "warning",
         title: "Missing Fields",
-        text: "Please fill out transaction ID, amount, and details before adding.",
+        text: "Please fill out transaction ID, amount, and note before adding.",
         confirmButtonColor: "rgb(var(--color-primary))",
         background: "rgb(var(--color-background))",
         color: "rgb(var(--color-text))",
@@ -374,7 +375,7 @@ export default function VendorTransactionPage() {
         position: "top-center",
         icon: "warning",
         title: "Missing Fields",
-        text: "Please fill out transaction ID, amount, and details before saving.",
+        text: "Please fill out transaction ID, amount, and note before saving.",
         confirmButtonColor: "rgb(var(--color-primary))",
         background: "rgb(var(--color-background))",
         color: "rgb(var(--color-text))",
@@ -615,7 +616,7 @@ export default function VendorTransactionPage() {
                   <div className="mb-6">
                     <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
                       <FaReceipt className="text-primary/60" />
-                      Details
+                      Note
                     </label>
                     <input
                       type="text"
@@ -623,7 +624,7 @@ export default function VendorTransactionPage() {
                       onChange={(e) =>
                         setForm({ ...form, details: e.target.value })
                       }
-                      placeholder="Enter transaction details"
+                      placeholder="Shown on the statement"
                       className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
                     />
                   </div>
@@ -834,6 +835,11 @@ export default function VendorTransactionPage() {
                           </td>
                           <td className="p-4 text-text max-w-xs">
                             {transaction.details}
+                            {transaction.source && transaction.note && (
+                              <span className="mt-1 block text-sm font-medium">
+                                Note: {transaction.note}
+                              </span>
+                            )}
                             {transaction.bankAccount && (
                               <Link
                                 href={`/banking/${transaction.bankAccount.id}`}
@@ -1037,7 +1043,7 @@ export default function VendorTransactionPage() {
 
                     <div>
                       <label className="flex items-center gap-2 text-text text-sm font-medium mb-2">
-                        Details
+                        Note
                       </label>
                       <input
                         type="text"
@@ -1045,7 +1051,7 @@ export default function VendorTransactionPage() {
                         onChange={(e) =>
                           setEditForm({ ...editForm, details: e.target.value })
                         }
-                        placeholder="Details"
+                        placeholder="Shown on the statement"
                         className="w-full p-3 border-2 border-primary/20 rounded-xl bg-background text-text placeholder:text-text/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 outline-none"
                       />
                     </div>

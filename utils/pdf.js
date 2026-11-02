@@ -3,7 +3,7 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { formatMoney } from "@utils/money";
-import { formatDate, formatKg } from "@utils/invoice";
+import { entryNote, formatDate, formatKg } from "@utils/invoice";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -723,13 +723,13 @@ export async function buildStatementPdf({ vendor, transactions, organization, br
     ["Closing balance", money(vendor.balance, currency)],
   ]);
   pdf.table({
-    head: ["Date", "Reference", "Details", "Cons.", "Credit", "Debit", "Balance"],
+    head: ["Date", "Reference", "Note", "Cons.", "Credit", "Debit", "Balance"],
     body: [
       ["", "", { content: "Opening balance", styles: { fontStyle: "italic" } }, "", "", "", money(opening)],
       ...rows.map((t) => [
         formatDate(t.createdAt),
         clean([t.transactionId, t.voucherId]).join("\n"),
-        t.details || "",
+        entryNote(t),
         t.consignmentId ? t.consignment?.number || `#${t.consignmentId}` : "",
         t.type === "credit" ? money(t.amount) : "",
         t.type === "debit" ? money(t.amount) : "",

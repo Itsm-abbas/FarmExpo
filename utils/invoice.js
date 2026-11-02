@@ -193,6 +193,10 @@ export function computeCommercialInvoice(invoice, { currency, rates = {}, accoun
   return { currency, goods, total, account };
 }
 
+// What a statement shows for a ledger entry: the note typed on the record it
+// was posted from, or what was typed on a manual entry. Never generated text.
+export const entryNote = (t) => (t.source ? t.note : t.details) || "";
+
 export const formatDate = (value) =>
   value
     ? new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })

@@ -33,6 +33,7 @@ export default function ConsigneeForm({
   const [selectedConsignee, setSelectedConsignee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balance, setBalance] = useState(0);
+  const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
   const { data: consignees, isLoading: LoadingConsignees } = useQuery({
@@ -45,7 +46,8 @@ export default function ConsigneeForm({
       setSelectedConsignee(existingData);
     }
     setBalance(formStatus?.consigneeAmount || 0);
-  }, [existingData, formStatus?.consigneeAmount]);
+    setNote(formStatus?.consigneeNote || "");
+  }, [existingData, formStatus?.consigneeAmount, formStatus?.consigneeNote]);
 
   const handleConsigneeChange = (e) => {
     const selectedId = e.target.value;
@@ -95,6 +97,7 @@ export default function ConsigneeForm({
         {
           consignee: { id: selectedConsignee.id },
           consigneeAmount: parseFloat(balance) || 0,
+          consigneeNote: note,
         },
         "Pending"
       );
@@ -297,6 +300,17 @@ export default function ConsigneeForm({
               step="0.01"
               icon={FaMoneyBill}
               helpertext="Amount billed to this consignee for this consignment. It is posted to their ledger."
+            />
+
+            <Input
+              id="note"
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional"
+              label="Note (shown on the statement)"
+              disabled={isLocked}
+              maxLength={500}
             />
           </div>
 
