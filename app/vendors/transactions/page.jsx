@@ -70,6 +70,7 @@ export default function VendorsTransactionsPage() {
     iataAgent: "IATA agents",
     customAgent: "Custom agents",
     trader: "Traders & farmers",
+    expense: "Expenses",
   };
   const shown = vendors.filter(
     (v) =>

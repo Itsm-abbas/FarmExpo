@@ -128,6 +128,9 @@ model Vendor {
   station        String
   // Balance the vendor started with, before any ledger transaction.
   openingBalance Float    @default(0)
+  // An expense head such as "Office expenses": a ledger of money spent, not a
+  // party. Its balance is the total spent.
+  isExpense      Boolean  @default(false)
   // Running balance = openingBalance + credits - debits. Maintained by lib/ledger.js.
   balance        Float?
   currency       String

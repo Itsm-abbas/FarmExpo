@@ -13,6 +13,7 @@ import {
   findOwned,
   ownedBy,
   parseId,
+  stamp,
   toNumber,
   withUser,
 } from "@lib/session";
@@ -65,10 +66,30 @@ async function findOwnedTransaction(id, user) {
   return txn;
 }
 
+// The expense head named `value`, whatever its capitalization. A new name
+// isn't saved yet: it is created with the entry, so a rejected entry leaves
+// nothing behind.
+async function findExpenseHead(value, user) {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (!name) throw new HttpError(400, "Enter what the money was spent on");
+  if (name.length > 120) throw new HttpError(400, "The expense name is too long");
+  const existing = await prisma.vendor.findFirst({
+    where: { ...ownedBy(user), isExpense: true, name: { equals: name, mode: "insensitive" } },
+  });
+  if (existing) return existing;
+  const organization = await prisma.organization.findUnique({
+    where: { id: user.organizationId },
+    select: { baseCurrency: true },
+  });
+  return { name, currency: organization?.baseCurrency || "PKR" };
+}
+
 export const POST = withUser(async (req, { user }) => {
   const body = await req.json();
-  const vendorId = parseId(body.vendorId);
-  const vendor = await findOwned(prisma.vendor, vendorId, ownedBy(user));
+  // Either a vendor's ledger, or `expenseHead`: the name of an expense.
+  const vendor = body.expenseHead !== undefined
+    ? await findExpenseHead(body.expenseHead, user)
+    : await findOwned(prisma.vendor, parseId(body.vendorId), ownedBy(user));
 
   let consignmentId = null;
   if (body.consignmentId) {
@@ -81,6 +102,24 @@ export const POST = withUser(async (req, { user }) => {
   const createdAt = readDate(body.date);
 
   const transaction = await prisma.$transaction(async (tx) => {
+    const vendorId =
+      vendor.id ??
+      (
+        await tx.vendor.create({
+          data: {
+            name: vendor.name,
+            currency: vendor.currency,
+            isExpense: true,
+            ntn: "",
+            address: "",
+            country: "",
+            station: "",
+            openingBalance: 0,
+            balance: 0,
+            ...stamp(user),
+          },
+        })
+      ).id;
     const created = await tx.transaction.create({
       data: {
         ...entry,

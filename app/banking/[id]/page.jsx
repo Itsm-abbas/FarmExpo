@@ -271,7 +271,7 @@ export default function BankAccountPage() {
                   <tr key={t.id} className="hover:bg-text/[0.02]">
                     <td className="whitespace-nowrap py-3 pr-3 tabular text-text/75">{formatDate(t.createdAt)}</td>
                     <td className="px-3 py-3 text-text">
-                      <span className="text-xs text-text/55">{t.bankType === "in" ? "Received from" : "Paid to"}</span>
+                      <span className="text-xs text-text/55">{t.bankType === "in" ? "Received from" : t.vendor.role === "expense" ? "Spent on" : "Paid to"}</span>
                       <Link href={`/vendor/transaction/${t.vendor.id}`} className="block font-medium hover:text-primary hover:underline">
                         {t.vendor.name}
                       </Link>

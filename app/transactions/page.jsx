@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LuLandmark } from "react-icons/lu";
 import axiosInstance from "@utils/axiosConfig";
+import useSession from "@hooks/useSession";
 import { listQueries, markLedgerChanged, queryKeys, toSearch } from "@hooks/queries";
 import { formatMoney } from "@utils/money";
 import { formatDate } from "@utils/invoice";
@@ -20,10 +21,15 @@ import {
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
 
+// Offered until the organization has used them; any other name can be typed.
+const COMMON_EXPENSES = ["Office expenses", "House expenses"];
+
 const emptyForm = (bankAccountId = "") => ({
   date: today(),
+  // "received" | "paid" (to a party) | "expense" (spent on an expense head).
   direction: "received",
   vendorId: "",
+  expenseHead: "",
   amount: "",
   bankAccountId,
   bankAmount: "",
@@ -38,6 +44,7 @@ const entryDay = (t) => new Date(t.createdAt).toLocaleDateString("en-CA");
 function TransactionsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const { currency } = useSession();
   const [form, setForm] = useState(() => emptyForm(searchParams.get("bankAccountId") || ""));
   const [message, setMessage] = useState(null);
   const [filters, setFilters] = useState(() => ({
@@ -60,11 +67,32 @@ function TransactionsPage() {
     (t) => (!filters.from || entryDay(t) >= filters.from) && (!filters.to || entryDay(t) <= filters.to)
   );
 
-  const party = vendors.find((v) => String(v.id) === form.vendorId);
+  const isExpense = form.direction === "expense";
+  const parties = vendors.filter((v) => v.role !== "expense");
+  const expenseHeads = vendors.filter((v) => v.role === "expense");
+  const expenseName = form.expenseHead.trim();
+  const expenseSuggestions = [
+    ...expenseHeads.map((v) => v.name),
+    ...COMMON_EXPENSES.filter(
+      (name) => !expenseHeads.some((v) => v.name.toLowerCase() === name.toLowerCase())
+    ),
+  ];
+  // An expense name not used before gets its ledger when the entry is saved.
+  const party = isExpense
+    ? expenseName
+      ? expenseHeads.find((v) => v.name.toLowerCase() === expenseName.toLowerCase()) || {
+          name: expenseName,
+          role: "expense",
+          currency,
+          balance: 0,
+        }
+      : null
+    : parties.find((v) => String(v.id) === form.vendorId);
   const bank = bankAccounts.find((b) => String(b.id) === form.bankAccountId);
   const openBanks = bankAccounts.filter((b) => b.active);
   const needsBankAmount = Boolean(party && bank && !sameCurrency(party.currency, bank.currency));
-  const ledgerType = party ? ledgerTypeFor(party.role, form.direction) : null;
+  const ledgerType = party ? ledgerTypeFor(party.role, isExpense ? "paid" : form.direction) : null;
+  const moneyIn = form.direction === "received";
   const amount = Number(form.amount) || 0;
 
   const save = useMutation({
@@ -74,7 +102,7 @@ function TransactionsPage() {
       setMessage({
         tone: "success",
         text: `Recorded: ${formatMoney(amount, party.currency, { decimals: 2 })} ${
-          form.direction === "received" ? "received from" : "paid to"
+          isExpense ? "spent on" : moneyIn ? "received from" : "paid to"
         } ${party.name}${bank ? ` through ${bankLabel(bank)}` : ""}.`,
       });
       // Keep the date, direction and bank: payments are often entered in a batch.
@@ -86,14 +114,19 @@ function TransactionsPage() {
   const submit = (e) => {
     e.preventDefault();
     setMessage(null);
-    if (!party) return setMessage({ tone: "error", text: "Choose who the payment was from or to." });
+    if (!party) {
+      return setMessage({
+        tone: "error",
+        text: isExpense ? "Enter what the money was spent on." : "Choose who the payment was from or to.",
+      });
+    }
     if (!(amount > 0)) return setMessage({ tone: "error", text: "Enter the amount." });
     if (needsBankAmount && !(Number(form.bankAmount) > 0)) {
       return setMessage({ tone: "error", text: `Enter the amount in ${bank.currency} that went through the bank.` });
     }
     if (!form.details.trim()) return setMessage({ tone: "error", text: "Add a few words of detail." });
     save.mutate({
-      vendorId: party.id,
+      ...(isExpense ? { expenseHead: expenseName } : { vendorId: party.id }),
       type: ledgerType,
       amount,
       date: form.date,
@@ -101,7 +134,7 @@ function TransactionsPage() {
       voucherId: form.voucherId,
       details: form.details.trim(),
       bankAccountId: bank ? bank.id : null,
-      bankType: bank ? (form.direction === "received" ? "in" : "out") : null,
+      bankType: bank ? (moneyIn ? "in" : "out") : null,
       bankAmount: needsBankAmount ? Number(form.bankAmount) : null,
     });
   };
@@ -122,7 +155,7 @@ function TransactionsPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageHeader
         title="Transactions"
-        description="Payments received from and paid to consignees, farmers, packers and agents. Each one is posted to that party's ledger, and to the bank account it went through."
+        description="Payments received from and paid to consignees, farmers, packers and agents, and money spent on expenses such as the office or house. Each one is posted to its ledger, and to the bank account it went through."
         actions={
           <Link
             href="/banking"
@@ -154,10 +187,11 @@ function TransactionsPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <fieldset className="sm:col-span-2 lg:col-span-3">
               <legend className="mb-1.5 text-sm font-medium text-text">Payment</legend>
-              <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+              <div className="grid gap-2 sm:max-w-2xl sm:grid-cols-3">
                 {[
                   ["received", "Received", "Money came in from them"],
                   ["paid", "Paid", "Money went out to them"],
+                  ["expense", "Expense", "Office, house and other spending"],
                 ].map(([value, label, hint]) => (
                   <label
                     key={value}
@@ -175,21 +209,32 @@ function TransactionsPage() {
             <Field label="Date" htmlFor="date">
               <input id="date" name="date" type="date" required max={today()} value={form.date} onChange={update} className={inputClass} />
             </Field>
-            <Field label={form.direction === "received" ? "Received from" : "Paid to"} htmlFor="vendorId">
-              <select id="vendorId" name="vendorId" required value={form.vendorId} onChange={update} className={inputClass}>
-                <option value="">Choose a party</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                    {v.role ? ` (${ROLE_LABELS[v.role]})` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {isExpense ? (
+              <Field label="Spent on" htmlFor="expenseHead" hint="Pick one or type a new name. Each has its own ledger under Ledgers.">
+                <input id="expenseHead" name="expenseHead" list="expense-heads" required maxLength={120} autoComplete="off" placeholder="e.g. Office expenses" value={form.expenseHead} onChange={update} className={inputClass} />
+                <datalist id="expense-heads">
+                  {expenseSuggestions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </Field>
+            ) : (
+              <Field label={moneyIn ? "Received from" : "Paid to"} htmlFor="vendorId">
+                <select id="vendorId" name="vendorId" required value={form.vendorId} onChange={update} className={inputClass}>
+                  <option value="">Choose a party</option>
+                  {parties.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.role ? ` (${ROLE_LABELS[v.role]})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field
               label={`Amount${party ? ` (${party.currency})` : ""}`}
               htmlFor="amount"
-              hint={party ? `In ${party.name}'s ledger currency.` : undefined}
+              hint={party && !isExpense ? `In ${party.name}'s ledger currency.` : undefined}
             >
               <input id="amount" name="amount" type="number" min="0" step="any" inputMode="decimal" value={form.amount} onChange={update} className={inputClass} />
             </Field>
@@ -238,9 +283,9 @@ function TransactionsPage() {
               )}
               {bank && (
                 <>
-                  , and {form.direction === "received" ? "adds" : "takes"}{" "}
+                  , and {moneyIn ? "adds" : "takes"}{" "}
                   {formatMoney(needsBankAmount ? Number(form.bankAmount) || 0 : amount, bank.currency, { decimals: 2 })}{" "}
-                  {form.direction === "received" ? "to" : "from"} {bankLabel(bank)}
+                  {moneyIn ? "to" : "from"} {bankLabel(bank)}
                 </>
               )}
               .

@@ -134,7 +134,7 @@ export default function Dashboard() {
     return c;
   }, [consignments]);
 
-  const payables = vendors.filter((v) => v.role && v.role !== "consignee" && v.balance > 0);
+  const payables = vendors.filter((v) => v.role && v.role !== "consignee" && v.role !== "expense" && v.balance > 0);
   const receivables = vendors.filter((v) => v.role === "consignee" && v.balance > 0);
 
   const visible = consignments

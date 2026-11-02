@@ -11,9 +11,11 @@ export const ROLE_LABELS = {
   iataAgent: "IATA agent",
   customAgent: "Custom agent",
   trader: "Trader / farmer",
+  expense: "Expense",
 };
 
-const owesUs = (role) => role === "consignee";
+// An expense head counts what was spent, so spending is a credit, like a bill.
+const owesUs = (role) => role === "consignee" || role === "expense";
 
 // "received" | "paid" -> the ledger entry's type.
 export const ledgerTypeFor = (role, direction) =>
