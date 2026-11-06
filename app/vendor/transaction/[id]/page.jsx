@@ -1,5 +1,5 @@
 "use client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import Swal from "sweetalert2";
@@ -148,6 +148,7 @@ const bankPayload = (value, vendor) =>
 export default function VendorTransactionPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const router = useRouter();
   // Staff can add entries; correcting or removing them is admin-only.
   const { permissions, organization } = useSession();
 
@@ -351,6 +352,62 @@ export default function VendorTransactionPage() {
       }),
   });
 
+  // Expense heads exist only as ledgers, so they are renamed and deleted here.
+  const changeExpenseHead = useMutation({
+    mutationFn: async ({ method, name }) => {
+      const res = await fetch(`/api/vendor/transactions/${id}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method === "PUT" ? JSON.stringify({ name }) : undefined,
+      });
+      if (!res.ok) throw new Error(await errorText(res, "Couldn't save the change"));
+      return method;
+    },
+    onSuccess: (method) => {
+      markLedgerChanged(queryClient);
+      if (method === "DELETE") router.replace("/vendors/transactions");
+    },
+    onError: (error) =>
+      Swal.fire({
+        icon: "error",
+        title: "Couldn't save the change",
+        text: error.message,
+        confirmButtonColor: "rgb(var(--color-primary))",
+        background: "rgb(var(--color-background))",
+        color: "rgb(var(--color-text))",
+      }),
+  });
+
+  const renameExpenseHead = async () => {
+    const { value: name } = await Swal.fire({
+      title: "Rename expense",
+      input: "text",
+      inputValue: data.vendor.name,
+      inputAttributes: { maxlength: 120, "aria-label": "Expense name" },
+      inputValidator: (value) => (!value.trim() ? "Enter a name" : undefined),
+      showCancelButton: true,
+      confirmButtonText: "Rename",
+      confirmButtonColor: "rgb(var(--color-primary))",
+      background: "rgb(var(--color-background))",
+      color: "rgb(var(--color-text))",
+    });
+    if (name && name.trim() !== data.vendor.name) changeExpenseHead.mutate({ method: "PUT", name: name.trim() });
+  };
+
+  const deleteExpenseHead = async () => {
+    const { isConfirmed } = await Swal.fire({
+      icon: "warning",
+      title: `Delete ${data.vendor.name}?`,
+      text: "The expense and its empty ledger are removed.",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#d33",
+      background: "rgb(var(--color-background))",
+      color: "rgb(var(--color-text))",
+    });
+    if (isConfirmed) changeExpenseHead.mutate({ method: "DELETE" });
+  };
+
   // --- Handlers ---
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -457,6 +514,29 @@ export default function VendorTransactionPage() {
                 <FaPlus className="text-sm" />
                 Add Transaction
               </motion.button>
+
+              {data.vendor.role === "expense" && permissions.editLedger && (
+                <>
+                  <button
+                    onClick={renameExpenseHead}
+                    disabled={changeExpenseHead.isPending}
+                    className="flex items-center gap-2 border border-text/15 bg-surface text-text hover:bg-text/5 px-4 py-2 rounded-xl transition-colors font-medium disabled:opacity-60"
+                  >
+                    <FaEdit className="text-sm" />
+                    Rename
+                  </button>
+                  {data.transactions.length === 0 && (
+                    <button
+                      onClick={deleteExpenseHead}
+                      disabled={changeExpenseHead.isPending}
+                      className="flex items-center gap-2 border border-red-500/30 text-red-600 hover:bg-red-500/10 px-4 py-2 rounded-xl transition-colors font-medium disabled:opacity-60"
+                    >
+                      <FaTrash className="text-sm" />
+                      Delete expense
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

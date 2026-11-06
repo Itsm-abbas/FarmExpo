@@ -4,12 +4,13 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LuLandmark } from "react-icons/lu";
+import Swal from "sweetalert2";
+import { LuFileSpreadsheet, LuFileText, LuLandmark, LuPencil } from "react-icons/lu";
 import axiosInstance from "@utils/axiosConfig";
 import useSession from "@hooks/useSession";
 import { listQueries, markLedgerChanged, queryKeys, toSearch } from "@hooks/queries";
 import { formatMoney } from "@utils/money";
-import { formatDate } from "@utils/invoice";
+import { entryNote, formatDate } from "@utils/invoice";
 import { daysBefore, today } from "@utils/days";
 import {
   ROLE_LABELS,
@@ -20,6 +21,7 @@ import {
 } from "@utils/banking";
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
+import EditPayment from "@components/Forms/EditPayment";
 
 // Offered until the organization has used them; any other name can be typed.
 const COMMON_EXPENSES = ["Office expenses", "House expenses"];
@@ -41,12 +43,24 @@ const emptyForm = (bankAccountId = "") => ({
 // The calendar day an entry was recorded, on this device ("YYYY-MM-DD").
 const entryDay = (t) => new Date(t.createdAt).toLocaleDateString("en-CA");
 
+// Every word of `query` appears somewhere in `fields`.
+const matchesWords = (query, fields) => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = fields.filter(Boolean).join(" ").toLowerCase();
+  return words.every((w) => haystack.includes(w));
+};
+
+const KIND_LABELS = { manual: "payments only", auto: "from consignments and purchases only" };
+
 function TransactionsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const { currency } = useSession();
+  const { currency, organization, permissions } = useSession();
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(() => emptyForm(searchParams.get("bankAccountId") || ""));
   const [message, setMessage] = useState(null);
+  const [note, setNote] = useState("");
+  const [exporting, setExporting] = useState(null);
   const [filters, setFilters] = useState(() => ({
     from: daysBefore(today(), 30),
     to: today(),
@@ -64,7 +78,10 @@ function TransactionsPage() {
   });
   // The API widens the dates by a day for time zones; narrow to this device's days.
   const rows = (data?.transactions || []).filter(
-    (t) => (!filters.from || entryDay(t) >= filters.from) && (!filters.to || entryDay(t) <= filters.to)
+    (t) =>
+      (!filters.from || entryDay(t) >= filters.from) &&
+      (!filters.to || entryDay(t) <= filters.to) &&
+      matchesWords(note, [entryNote(t)])
   );
 
   const isExpense = form.direction === "expense";
@@ -141,6 +158,57 @@ function TransactionsPage() {
 
   const update = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   const setFilter = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+  // The history as filtered, oldest first, in the organization's template and letterhead.
+  const exportHistory = async (kind) => {
+    setExporting(kind);
+    try {
+      const pdf = await import("@utils/pdf");
+      const vendor = vendors.find((v) => String(v.id) === filters.vendorId);
+      const bankFilter = bankAccounts.find((b) => String(b.id) === filters.bankAccountId);
+      const args = {
+        rows: [...rows].reverse().map((t) => ({
+          ...t,
+          direction: t.source ? null : directionOf(t, t.vendor.role),
+          roleLabel: t.vendor.role ? ROLE_LABELS[t.vendor.role] : "",
+        })),
+        filters: [
+          filters.from && filters.to
+            ? `${formatDate(filters.from)} to ${formatDate(filters.to)}`
+            : filters.from
+              ? `from ${formatDate(filters.from)}`
+              : filters.to && `up to ${formatDate(filters.to)}`,
+          vendor && `party: ${vendor.name}`,
+          filters.bankAccountId === "none" ? "not through a bank" : bankFilter && `bank: ${bankLabel(bankFilter)}`,
+          KIND_LABELS[filters.kind],
+          note.trim() && `note contains "${note.trim()}"`,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        organization,
+      };
+      const name = pdf.fileSlug(`transactions-${new Date().toISOString().slice(0, 10)}`);
+      if (kind === "excel") {
+        const { exportTransactionsExcel } = await import("@utils/excel");
+        exportTransactionsExcel({ ...args, filename: `${name}.xlsx` });
+      } else {
+        const branding = await pdf.loadBranding(organization);
+        pdf.downloadFile(await pdf.buildTransactionsPdf({ ...args, branding }), `${name}.pdf`);
+      }
+    } catch (err) {
+      console.error("Transactions export failed:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Export failed",
+        text: err.message || "Couldn't create the file. Try again.",
+        confirmButtonColor: "rgb(var(--color-primary))",
+        background: "rgb(var(--color-surface))",
+        color: "rgb(var(--color-text))",
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   if (vendorsLoading || banksLoading) return <PageLoader label="Loading transactions…" />;
 
@@ -294,8 +362,24 @@ function TransactionsPage() {
         </Panel>
       </form>
 
-      <Panel title="History">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <Panel
+        title="History"
+        description="Exports include only the entries the filters show."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => exportHistory("excel")} loading={exporting === "excel"} disabled={!rows.length || Boolean(exporting)}>
+              <LuFileSpreadsheet className="h-4 w-4" /> Excel
+            </Button>
+            <Button onClick={() => exportHistory("pdf")} loading={exporting === "pdf"} disabled={!rows.length || Boolean(exporting)}>
+              <LuFileText className="h-4 w-4" /> PDF
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Note" htmlFor="f-note">
+            <input id="f-note" type="search" placeholder="Words in the note" value={note} onChange={(e) => setNote(e.target.value)} className={inputClass} />
+          </Field>
           <Field label="From" htmlFor="f-from">
             <input id="f-from" name="from" type="date" value={filters.from} onChange={setFilter} className={inputClass} />
           </Field>
@@ -332,18 +416,19 @@ function TransactionsPage() {
           {isLoading ? (
             <p role="status" className="py-8 text-center text-sm text-text/55">Loading transactions…</p>
           ) : rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-text/60">Nothing in this period. Change the filters or record a transaction above.</p>
+            <p className="py-8 text-center text-sm text-text/60">{note.trim() ? "No entries have that in their note." : "Nothing in this period. Change the filters or record a transaction above."}</p>
           ) : (
             <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap border-b border-text/10 text-left text-xs text-text/55">
                   <th className="py-2.5 pr-3 font-medium">Date</th>
                   <th className="px-3 py-2.5 font-medium">Party</th>
-                  <th className="px-3 py-2.5 font-medium">Details</th>
+                  <th className="px-3 py-2.5 font-medium">Note</th>
                   <th className="px-3 py-2.5 font-medium">Bank</th>
                   <th className="px-3 py-2.5 text-right font-medium">Received</th>
                   <th className="px-3 py-2.5 text-right font-medium">Paid</th>
                   <th className="py-2.5 pl-3 text-right font-medium">Ledger</th>
+                  {permissions.editLedger && <th className="w-10 py-2.5 pl-2"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-text/10">
@@ -360,7 +445,7 @@ function TransactionsPage() {
                         {t.vendor.role && <span className="block text-xs text-text/50">{ROLE_LABELS[t.vendor.role]}</span>}
                       </td>
                       <td className="max-w-xs px-3 py-3 text-text/80">
-                        {t.details}
+                        {entryNote(t)}
                         {(t.transactionId || t.voucherId) && !t.source && (
                           <span className="block text-xs text-text/50">
                             {[t.transactionId && `Ref ${t.transactionId}`, t.voucherId && `Voucher ${t.voucherId}`].filter(Boolean).join(" · ")}
@@ -392,6 +477,21 @@ function TransactionsPage() {
                       <td className="whitespace-nowrap py-3 pl-3 text-right text-xs text-text/60">
                         {t.type === "credit" ? "Credit" : "Debit"} {t.source ? value : ""}
                       </td>
+                      {permissions.editLedger && (
+                        <td className="py-3 pl-2 text-right">
+                          {!t.source && (
+                            <button
+                              type="button"
+                              onClick={() => setEditing(t)}
+                              aria-label={`Edit or delete the payment for ${t.vendor.name}`}
+                              title="Edit or delete"
+                              className="rounded-lg p-1.5 text-text/50 hover:bg-text/5 hover:text-primary"
+                            >
+                              <LuPencil className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -405,6 +505,7 @@ function TransactionsPage() {
                     <td className="whitespace-nowrap px-3 py-3 text-right tabular">{formatMoney(sum(received), oneCurrency, { decimals: 2 })}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-right tabular">{formatMoney(sum(paid), oneCurrency, { decimals: 2 })}</td>
                     <td />
+                    {permissions.editLedger && <td />}
                   </tr>
                 </tfoot>
               )}
@@ -415,6 +516,7 @@ function TransactionsPage() {
           )}
         </div>
       </Panel>
+      {editing && <EditPayment entry={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

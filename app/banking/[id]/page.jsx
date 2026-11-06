@@ -5,16 +5,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
-import { LuArrowLeft, LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
+import { LuArrowLeft, LuFileSpreadsheet, LuFileText, LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
 import axiosInstance from "@utils/axiosConfig";
 import useSession from "@hooks/useSession";
 import { queryKeys } from "@hooks/queries";
 import { formatMoney } from "@utils/money";
-import { formatDate } from "@utils/invoice";
+import { entryNote, formatDate } from "@utils/invoice";
 import { ROLE_LABELS } from "@utils/banking";
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
 import BankAccountFields, { bankAccountForm } from "@components/Forms/BankAccount";
+import EditPayment from "@components/Forms/EditPayment";
 
 const swalTheme = {
   background: "rgb(var(--color-surface))",
@@ -24,6 +25,31 @@ const swalTheme = {
 
 // The calendar day an entry was recorded, on this device ("YYYY-MM-DD").
 const entryDay = (t) => new Date(t.createdAt).toLocaleDateString("en-CA");
+
+const NO_FILTERS = { text: "", note: "", vendorId: "", direction: "", from: "", to: "" };
+
+const partyLabel = (t) =>
+  t.bankType === "in" ? "Received from" : t.vendor?.role === "expense" ? "Spent on" : "Paid to";
+
+// Every word of `query` appears somewhere in `fields`.
+const matchesWords = (query, fields) => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = fields.filter(Boolean).join(" ").toLowerCase();
+  return words.every((w) => haystack.includes(w));
+};
+
+// The filters in words, printed on exported statements.
+function describeFilters(f, parties) {
+  return [
+    f.from && f.to ? `${formatDate(f.from)} to ${formatDate(f.to)}` : f.from ? `from ${formatDate(f.from)}` : f.to && `up to ${formatDate(f.to)}`,
+    f.direction && (f.direction === "in" ? "money in only" : "money out only"),
+    f.vendorId && `party: ${parties.find((p) => String(p.id) === f.vendorId)?.name || ""}`,
+    f.note.trim() && `note contains "${f.note.trim()}"`,
+    f.text.trim() && `search "${f.text.trim()}"`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
 
 function Detail({ label, value }) {
   if (!value) return null;
@@ -39,11 +65,13 @@ export default function BankAccountPage() {
   const { id } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { permissions } = useSession();
+  const { permissions, organization } = useSession();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ text: "", direction: "", from: "", to: "" });
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const [exporting, setExporting] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [...queryKeys.bankAccounts, Number(id)],
@@ -70,25 +98,29 @@ export default function BankAccountPage() {
     onError: (err) => Swal.fire({ ...swalTheme, icon: "error", title: "Couldn't delete it", text: err.message }),
   });
 
-  const statement = useMemo(() => {
-    const rows = data?.statement || [];
-    const words = filters.text.toLowerCase().split(/\s+/).filter(Boolean);
-    return rows
-      .filter((t) => {
-        if (filters.direction && t.bankType !== filters.direction) return false;
-        if (filters.from && entryDay(t) < filters.from) return false;
-        if (filters.to && entryDay(t) > filters.to) return false;
-        if (words.length) {
-          const haystack = [t.vendor?.name, t.details, t.transactionId, t.voucherId, String(t.bankAmount)]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          if (!words.every((w) => haystack.includes(w))) return false;
-        }
-        return true;
-      })
-      .reverse(); // newest first
-  }, [data, filters]);
+  // Oldest first, as exported; the table shows it newest first.
+  const matching = useMemo(
+    () =>
+      (data?.statement || []).filter(
+        (t) =>
+          (!filters.direction || t.bankType === filters.direction) &&
+          (!filters.vendorId || String(t.vendor?.id) === filters.vendorId) &&
+          (!filters.from || entryDay(t) >= filters.from) &&
+          (!filters.to || entryDay(t) <= filters.to) &&
+          matchesWords(filters.note, [entryNote(t)]) &&
+          matchesWords(filters.text, [t.vendor?.name, entryNote(t), t.transactionId, t.voucherId, String(t.bankAmount)])
+      ),
+    [data, filters]
+  );
+  const statement = useMemo(() => [...matching].reverse(), [matching]);
+  // Everyone money went to or came from through this account.
+  const parties = useMemo(
+    () =>
+      [...new Map((data?.statement || []).map((t) => [t.vendor.id, t.vendor])).values()].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      ),
+    [data]
+  );
 
   if (isLoading) return <PageLoader label="Loading the account…" />;
   if (isError || !data) {
@@ -103,6 +135,39 @@ export default function BankAccountPage() {
   const hasEntries = data.statement.length > 0;
   const money = (v) => formatMoney(v, account.currency, { decimals: 2 });
   const setFilter = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const filtering = Object.entries(filters).some(([key, value]) => value !== NO_FILTERS[key]);
+  const moneyIn = matching.filter((t) => t.bankType === "in").reduce((s, t) => s + t.bankAmount, 0);
+  const moneyOut = matching.filter((t) => t.bankType === "out").reduce((s, t) => s + t.bankAmount, 0);
+
+  // The statement as filtered, in the organization's template and letterhead.
+  const exportStatement = async (kind) => {
+    setExporting(kind);
+    try {
+      const pdf = await import("@utils/pdf");
+      const name = pdf.fileSlug(
+        `bank-statement-${account.bankName}-${account.accountNumber}-${new Date().toISOString().slice(0, 10)}`
+      );
+      const args = {
+        account,
+        rows: matching,
+        filters: describeFilters(filters, parties),
+        partyLabel,
+        organization,
+      };
+      if (kind === "excel") {
+        const { exportBankStatementExcel } = await import("@utils/excel");
+        exportBankStatementExcel({ ...args, filename: `${name}.xlsx` });
+      } else {
+        const branding = await pdf.loadBranding(organization);
+        pdf.downloadFile(await pdf.buildBankStatementPdf({ ...args, branding }), `${name}.pdf`);
+      }
+    } catch (err) {
+      console.error("Bank statement export failed:", err);
+      Swal.fire({ ...swalTheme, icon: "error", title: "Export failed", text: err.message || "Couldn't create the file. Try again." });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const startEdit = () => {
     setError("");
@@ -227,10 +292,39 @@ export default function BankAccountPage() {
         </Panel>
       )}
 
-      <Panel title="Statement" description="Every payment recorded through this account. Received is money in from the party; paid is money out to them.">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Panel
+        title="Statement"
+        description="Every payment recorded through this account. Exports include only the entries the filters show."
+        footer={
+          hasEntries && (
+            <>
+              <Button variant="secondary" onClick={() => exportStatement("excel")} loading={exporting === "excel"} disabled={!matching.length || Boolean(exporting)}>
+                <LuFileSpreadsheet className="h-4 w-4" /> Excel
+              </Button>
+              <Button onClick={() => exportStatement("pdf")} loading={exporting === "pdf"} disabled={!matching.length || Boolean(exporting)}>
+                <LuFileText className="h-4 w-4" /> PDF
+              </Button>
+            </>
+          )
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Note" htmlFor="statement-note">
+            <input id="statement-note" name="note" type="search" placeholder="Words in the note" value={filters.note} onChange={setFilter} className={inputClass} />
+          </Field>
           <Field label="Search" htmlFor="statement-text">
-            <input id="statement-text" name="text" type="search" placeholder="Party, details, reference" value={filters.text} onChange={setFilter} className={inputClass} />
+            <input id="statement-text" name="text" type="search" placeholder="Party, note, reference, amount" value={filters.text} onChange={setFilter} className={inputClass} />
+          </Field>
+          <Field label="From / to" htmlFor="statement-party">
+            <select id="statement-party" name="vendorId" value={filters.vendorId} onChange={setFilter} className={inputClass}>
+              <option value="">Everyone</option>
+              {parties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.role ? ` (${ROLE_LABELS[p.role]})` : ""}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Direction" htmlFor="statement-direction">
             <select id="statement-direction" name="direction" value={filters.direction} onChange={setFilter} className={inputClass}>
@@ -246,6 +340,24 @@ export default function BankAccountPage() {
             <input id="statement-to" name="to" type="date" value={filters.to} onChange={setFilter} className={inputClass} />
           </Field>
         </div>
+        {hasEntries && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm" role="status" aria-live="polite">
+            <span className="text-text/70">
+              {filtering ? `${matching.length} of ${data.statement.length} entries match` : `${data.statement.length} entries`}
+            </span>
+            <span className="text-text/70">
+              In <strong className="tabular text-text">{money(moneyIn)}</strong>
+            </span>
+            <span className="text-text/70">
+              Out <strong className="tabular text-text">{money(moneyOut)}</strong>
+            </span>
+            {filtering && (
+              <button type="button" onClick={() => setFilters(NO_FILTERS)} className="font-medium text-primary hover:underline">
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 overflow-x-auto">
           {!hasEntries ? (
@@ -260,10 +372,11 @@ export default function BankAccountPage() {
                 <tr className="whitespace-nowrap border-b border-text/10 text-left text-xs text-text/55">
                   <th className="py-2.5 pr-3 font-medium">Date</th>
                   <th className="px-3 py-2.5 font-medium">From / to</th>
-                  <th className="px-3 py-2.5 font-medium">Details</th>
+                  <th className="px-3 py-2.5 font-medium">Note</th>
                   <th className="px-3 py-2.5 text-right font-medium">Money in</th>
                   <th className="px-3 py-2.5 text-right font-medium">Money out</th>
                   <th className="py-2.5 pl-3 text-right font-medium">Balance</th>
+                  {permissions.editLedger && <th className="w-10 py-2.5 pl-2"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-text/10">
@@ -271,14 +384,14 @@ export default function BankAccountPage() {
                   <tr key={t.id} className="hover:bg-text/[0.02]">
                     <td className="whitespace-nowrap py-3 pr-3 tabular text-text/75">{formatDate(t.createdAt)}</td>
                     <td className="px-3 py-3 text-text">
-                      <span className="text-xs text-text/55">{t.bankType === "in" ? "Received from" : t.vendor.role === "expense" ? "Spent on" : "Paid to"}</span>
+                      <span className="text-xs text-text/55">{partyLabel(t)}</span>
                       <Link href={`/vendor/transaction/${t.vendor.id}`} className="block font-medium hover:text-primary hover:underline">
                         {t.vendor.name}
                       </Link>
                       {t.vendor.role && <span className="text-xs text-text/50">{ROLE_LABELS[t.vendor.role]}</span>}
                     </td>
                     <td className="max-w-xs px-3 py-3 text-text/80">
-                      {t.details}
+                      {entryNote(t)}
                       {(t.transactionId || t.voucherId) && (
                         <span className="block text-xs text-text/50">
                           {[t.transactionId && `Ref ${t.transactionId}`, t.voucherId && `Voucher ${t.voucherId}`].filter(Boolean).join(" · ")}
@@ -294,6 +407,23 @@ export default function BankAccountPage() {
                     <td className={`whitespace-nowrap py-3 pl-3 text-right font-semibold tabular ${t.bankBalance < 0 ? "text-red-600" : "text-text"}`}>
                       {money(t.bankBalance)}
                     </td>
+                    {permissions.editLedger && (
+                      <td className="py-3 pl-2 text-right">
+                        {t.source ? (
+                          <span className="text-xs text-text/40" title="Posted from a consignment or purchase. Change it there.">Auto</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingEntry(t)}
+                            aria-label={`Edit or delete the payment for ${t.vendor.name}`}
+                            title="Edit or delete"
+                            className="rounded-lg p-1.5 text-text/50 hover:bg-text/5 hover:text-primary"
+                          >
+                            <LuPencil className="h-4 w-4" />
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -301,6 +431,7 @@ export default function BankAccountPage() {
           )}
         </div>
       </Panel>
+      {editingEntry && <EditPayment entry={editingEntry} onClose={() => setEditingEntry(null)} />}
     </div>
   );
 }

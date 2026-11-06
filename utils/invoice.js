@@ -118,7 +118,10 @@ export function computeInvoice(consignment, utilizations = []) {
       ? { agent: c.customClearance.customAgent?.vendor?.name || "", fee: num(c.customClearance.fee) }
       : null,
     packing: c.packing
-      ? { packer: c.packing.packer?.vendor?.name || "", ratePerKg: num(c.packing.ratePerKg) }
+      ? {
+          packer: c.packing.packer?.vendor?.name || c.packing.trader?.name || "",
+          ratePerKg: num(c.packing.ratePerKg),
+        }
       : null,
     goods,
     totals: {
@@ -192,6 +195,9 @@ export function computeCommercialInvoice(invoice, { currency, rates = {}, accoun
   const total = round2(goods.reduce((s, g) => s + g.amount, 0));
   return { currency, goods, total, account };
 }
+
+// A goods row's amount per unit of quantity (per box, crate…).
+export const pricePerUnit = (g) => (g.quantity ? round2(g.amount / g.quantity) : 0);
 
 // What a statement shows for a ledger entry: the note typed on the record it
 // was posted from, or what was typed on a manual entry. Never generated text.

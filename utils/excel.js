@@ -2,7 +2,7 @@
 // formats), totals are SUM formulas, and layout is tracked as rows are added,
 // so sections never drift out of place.
 import XLSX from "xlsx-js-style";
-import { entryNote, formatDate } from "@utils/invoice";
+import { entryNote, formatDate, pricePerUnit } from "@utils/invoice";
 import { formatDay } from "@utils/days";
 
 const MONEY = "#,##0.00";
@@ -196,7 +196,7 @@ const orgSubtitle = (org) =>
 // commercial invoice: selling rates and the consignee's account, without
 // purchase rates, airway bill charges, instruments or costs.
 export function exportInvoiceExcel({ invoice, organization, currency, includeCosts = true, commercial = null, filename }) {
-  const b = new SheetBuilder([6, 24, 16, 10, 12, 14, 14, 16, 18], organization?.brandColor);
+  const b = new SheetBuilder([6, 24, 16, 10, 12, 14, 14, 16, 16, 18], organization?.brandColor);
   // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
   const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
   const goodsCurrency = commercial ? commercial.currency : currency;
@@ -226,7 +226,8 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
 
   const awb = invoice.airwayBill;
   const gd = invoice.goodsDeclaration;
-  if (awb || gd) {
+  // Shipment details are internal: the commercial invoice leaves them out.
+  if ((awb || gd) && !commercial) {
     b.section("Shipment");
     const shipment = [
       ["Airway bill", awb?.number || ""],
@@ -238,18 +239,13 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       ["Chargeable weight", awb ? awb.weight : "", KG],
       [`Freight (${foreign})`, gd ? gd.freight : ""],
     ];
-    // Airway bill charges and the exchange rate are internal.
-    b.pairs(
-      commercial
-        ? [...shipment, [`CFR (${foreign})`, gd ? gd.cfr : ""]]
-        : [
-            ...shipment,
-            [`Rate / kg (${currency})`, awb ? awb.rate : ""],
-            [`CFR (${foreign})`, gd ? gd.cfr : ""],
-            [`Agent fee (${currency})`, awb ? awb.fee : ""],
-            [`Exchange rate (${currency} per ${foreign || "unit"})`, gd ? gd.exchangeRate : "", "0.0000"],
-          ]
-    );
+    b.pairs([
+      ...shipment,
+      [`Rate / kg (${currency})`, awb ? awb.rate : ""],
+      [`CFR (${foreign})`, gd ? gd.cfr : ""],
+      [`Agent fee (${currency})`, awb ? awb.fee : ""],
+      [`Exchange rate (${currency} per ${foreign || "unit"})`, gd ? gd.exchangeRate : "", "0.0000"],
+    ]);
   }
 
   b.section("Goods");
@@ -262,10 +258,11 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       { header: "Kg / unit", key: "netPerUnit", format: KG },
       { header: "Net kg", key: "netWeight", format: KG, total: "sum" },
       { header: "Gross kg", key: "grossWeight", format: KG, total: "sum" },
-      { header: `Rate / kg (${goodsCurrency})`, key: commercial ? "rate" : "ratePerKg", format: MONEY },
-      { header: `Amount (${goodsCurrency})`, key: commercial ? "amount" : "goodsCost", format: MONEY, total: "sum" },
+      { header: `Rate / kg (${goodsCurrency})`, key: "rate", format: MONEY },
+      { header: `Price / qty (${goodsCurrency})`, key: pricePerUnit, format: MONEY },
+      { header: `Amount (${goodsCurrency})`, key: "amount", format: MONEY, total: "sum" },
     ],
-    commercial ? commercial.goods : invoice.goods
+    commercial ? commercial.goods : invoice.goods.map((g) => ({ ...g, rate: g.ratePerKg, amount: g.goodsCost }))
   );
 
   const account = commercial?.account;
@@ -432,4 +429,90 @@ export function exportDailyPricesExcel({ rows, organization, currency, from, to,
   XLSX.utils.book_append_sheet(workbook, daily.toSheet(), "Daily prices");
   XLSX.utils.book_append_sheet(workbook, detail.toSheet(), "Purchases");
   XLSX.writeFile(workbook, filename, { compression: true, bookType: "xlsx" });
+}
+
+const referenceOf = (t) =>
+  [t.transactionId && `Ref ${t.transactionId}`, t.voucherId && `Voucher ${t.voucherId}`].filter(Boolean).join(" · ");
+
+const filtersLine = (b, filters) => {
+  if (!filters) return;
+  const r = b.add([{ v: `Filtered: ${filters}`, t: "s", s: { font: { italic: true, color: { rgb: "68726D" } } } }]);
+  b.mergeRow(r);
+};
+
+// A bank account's statement; `rows` as for buildBankStatementPdf.
+export function exportBankStatementExcel({ account, rows, filters, partyLabel, organization, filename }) {
+  const b = new SheetBuilder([14, 14, 26, 36, 22, 16, 16, 16], organization?.brandColor);
+  const currency = account.currency;
+  const moneyIn = rows.filter((t) => t.bankType === "in").reduce((s, t) => s + t.bankAmount, 0);
+  const moneyOut = rows.filter((t) => t.bankType === "out").reduce((s, t) => s + t.bankAmount, 0);
+
+  b.title(organization?.name || "FarmExpo", orgSubtitle(organization));
+  b.blank();
+  b.pairs(
+    [
+      ["Bank statement", `${account.bankName} ${account.accountNumber}`],
+      ["Account title", account.accountTitle],
+      ["IBAN", account.iban || ""],
+      ["Currency", currency],
+      [`Money in (${currency})`, moneyIn],
+      [`Money out (${currency})`, moneyOut],
+      [`Net (${currency})`, moneyIn - moneyOut],
+      [`Balance today (${currency})`, account.balance],
+      ["Entries", rows.length, INT],
+      ["Date", formatDate(new Date())],
+    ],
+    { half: 4 }
+  );
+  filtersLine(b, filters);
+  b.blank();
+  b.table(
+    [
+      { header: "Date", key: (t) => formatDate(t.createdAt) },
+      { header: "", key: partyLabel },
+      { header: "From / to", key: (t) => t.vendor?.name || "" },
+      { header: "Note", key: entryNote, total: `Totals (${currency})` },
+      { header: "Reference", key: referenceOf },
+      { header: "Money in", key: (t) => (t.bankType === "in" ? t.bankAmount : ""), format: MONEY, total: "sum" },
+      { header: "Money out", key: (t) => (t.bankType === "out" ? t.bankAmount : ""), format: MONEY, total: "sum" },
+      { header: "Balance", key: "bankBalance", format: MONEY },
+    ],
+    rows
+  );
+  save(b, "Bank statement", filename);
+}
+
+// Transactions across ledgers; `rows` as for buildTransactionsPdf.
+export function exportTransactionsExcel({ rows, filters, organization, filename }) {
+  const b = new SheetBuilder([14, 26, 16, 36, 22, 24, 10, 16, 16], organization?.brandColor);
+  // Totals only add up within one currency.
+  const one = new Set(rows.map((t) => t.vendor.currency)).size === 1;
+  const amountIf = (direction) => (t) => (t.direction === direction ? t.amount : "");
+
+  b.title(organization?.name || "FarmExpo", orgSubtitle(organization));
+  b.blank();
+  b.pairs([
+    ["Transactions", `${rows.length} entries`],
+    ["Date", formatDate(new Date())],
+  ]);
+  filtersLine(b, filters);
+  b.blank();
+  b.table(
+    [
+      { header: "Date", key: (t) => formatDate(t.createdAt) },
+      { header: "Party", key: (t) => t.vendor.name },
+      { header: "Type", key: (t) => t.roleLabel || "" },
+      { header: "Note", key: entryNote, ...(one ? { total: "Totals" } : {}) },
+      { header: "Reference", key: referenceOf },
+      {
+        header: "Bank",
+        key: (t) => (t.bankAccount ? `${t.bankAccount.bankName} ${t.bankAccount.accountNumber}` : t.source ? "" : "Cash"),
+      },
+      { header: "Currency", key: (t) => t.vendor.currency },
+      { header: "Received", key: amountIf("received"), format: MONEY, ...(one ? { total: "sum" } : {}) },
+      { header: "Paid", key: amountIf("paid"), format: MONEY, ...(one ? { total: "sum" } : {}) },
+    ],
+    rows
+  );
+  save(b, "Transactions", filename);
 }

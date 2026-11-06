@@ -96,6 +96,8 @@ model Trader {
   vendorId             Int?                  @unique
   vendor               Vendor?               @relation(fields: [vendorId], references: [id])
   purchases            Purchase[]
+  // Consignments they packed for us.
+  packings             Packing[]
 
   @@index([userId])
   @@index([organizationId])
@@ -327,18 +329,23 @@ model Packing {
   id             Int      @id @default(autoincrement())
   userId         Int?
   organizationId Int?
-  packerId       Int
+  // Who packed: a packer, or a trader / farmer who did the packing. Exactly
+  // one is set, and the packing cost is posted to that one's ledger.
+  packerId       Int?
+  traderId       Int?
   ratePerKg      Float
   note           String?
   totalCost      Float?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  packer       Packer        @relation(fields: [packerId], references: [id])
+  packer       Packer?       @relation(fields: [packerId], references: [id], onDelete: Restrict)
+  trader       Trader?       @relation(fields: [traderId], references: [id], onDelete: Restrict)
   consignments Consignment[]
 
   @@index([userId])
   @@index([organizationId])
+  @@index([traderId])
 }
 
 model RecoveryDone {

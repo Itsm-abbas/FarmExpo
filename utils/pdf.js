@@ -3,7 +3,7 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { formatMoney } from "@utils/money";
-import { entryNote, formatDate, formatKg } from "@utils/invoice";
+import { entryNote, formatDate, formatKg, pricePerUnit } from "@utils/invoice";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -573,8 +573,9 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     },
   ]);
 
+  // Shipment details are internal: the commercial invoice leaves them out.
   const shipment = [];
-  if (awb) {
+  if (awb && !commercial) {
     shipment.push(
       ["Airway bill", awb.number],
       ["IATA agent", clean([awb.agent, awb.station]).join(", ")],
@@ -582,17 +583,15 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       ["Chargeable weight", formatKg(awb.weight)]
     );
   }
-  if (gd) {
+  if (gd && !commercial) {
     shipment.push(
       ["Goods declaration", gd.number],
       ["GD date", formatDate(gd.date)],
       ["FOB", money(gd.fob, foreign)],
       ["Freight", money(gd.freight, foreign)],
-      ["CFR", money(gd.cfr, foreign)]
+      ["CFR", money(gd.cfr, foreign)],
+      ["Exchange rate", gd.exchangeRate ? `${currency} ${gd.exchangeRate} per ${foreign || "unit"}` : ""]
     );
-    if (!commercial) {
-      shipment.push(["Exchange rate", gd.exchangeRate ? `${currency} ${gd.exchangeRate} per ${foreign || "unit"}` : ""]);
-    }
   }
   if (shipment.length) {
     pdf.sectionTitle("Shipment", Math.ceil(shipment.length / 2) * 5.5);
@@ -601,7 +600,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
 
   pdf.sectionTitle("Goods", pdf.tableHeight(Math.min(invoice.goods.length, 3)));
   pdf.table({
-    head: ["#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${goodsCurrency})`, `Amount (${goodsCurrency})`],
+    head: ["#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${goodsCurrency})`, `Price / qty (${goodsCurrency})`, `Amount (${goodsCurrency})`],
     body: goodsRows.map((g) => [
       g.index,
       g.name,
@@ -611,6 +610,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       g.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       g.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       money(g.rate),
+      money(pricePerUnit(g)),
       money(g.amount),
     ]),
     foot: [
@@ -622,6 +622,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       invoice.totals.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       invoice.totals.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       "",
+      "",
       money(goodsTotal),
     ],
     columnStyles: {
@@ -632,6 +633,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       6: right,
       7: right,
       8: right,
+      9: right,
     },
   });
 
@@ -788,3 +790,112 @@ export const fileSlug = (text) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "document";
+
+// "Ref 12 · Voucher 7" under a note, when either is set.
+const referenceLine = (t) =>
+  clean([t.transactionId && `Ref ${t.transactionId}`, t.voucherId && `Voucher ${t.voucherId}`]).join(" · ");
+
+const noteCell = (t) => clean([entryNote(t), referenceLine(t)]).join("\n");
+
+const periodOf = (rows) =>
+  rows.length
+    ? `${formatDate(rows[0].createdAt)} to ${formatDate(rows[rows.length - 1].createdAt)}`
+    : "No entries";
+
+// A bank account's statement. `rows` are the entries shown (any filters
+// applied), oldest first, each with `bankAmount` and the account's running
+// `bankBalance`; `filters` describes the filters in words, if any.
+export async function buildBankStatementPdf({ account, rows, filters, partyLabel, organization, branding, template }) {
+  const pdf = new PdfBuilder({ organization, branding, template });
+  const currency = account.currency;
+  const moneyIn = rows.filter((t) => t.bankType === "in").reduce((s, t) => s + t.bankAmount, 0);
+  const moneyOut = rows.filter((t) => t.bankType === "out").reduce((s, t) => s + t.bankAmount, 0);
+
+  pdf.header();
+  pdf.titleBlock("Bank statement", [
+    ["Bank", account.bankName],
+    ["Account no.", account.accountNumber],
+    ["Title", account.accountTitle],
+    ...(account.iban ? [["IBAN", account.iban]] : []),
+    ["Period", periodOf(rows)],
+    ["Date", formatDate(new Date())],
+  ]);
+  if (filters) pdf.paragraph(`Filtered: ${filters}`);
+  pdf.figures([
+    ["Money in", money(moneyIn, currency)],
+    ["Money out", money(moneyOut, currency)],
+    ["Net", money(moneyIn - moneyOut, currency)],
+    ["Balance today", money(account.balance, currency)],
+  ]);
+  pdf.table({
+    head: ["Date", "From / to", "Note", "Money in", "Money out", "Balance"],
+    body: rows.map((t) => [
+      formatDate(t.createdAt),
+      clean([partyLabel(t), t.vendor?.name]).join("\n"),
+      noteCell(t),
+      t.bankType === "in" ? money(t.bankAmount) : "",
+      t.bankType === "out" ? money(t.bankAmount) : "",
+      money(t.bankBalance),
+    ]),
+    foot: ["", "", `Totals (${currency})`, money(moneyIn), money(moneyOut), ""],
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 40 },
+      3: { ...right, cellWidth: 24 },
+      4: { ...right, cellWidth: 24 },
+      5: { ...right, cellWidth: 26 },
+    },
+  });
+  return pdf.output(generatedNote());
+}
+
+// Transactions across ledgers (the Transactions page). `rows` are oldest
+// first, each with `direction` ("received" | "paid", or null for entries
+// posted from consignments and purchases) and `roleLabel`; amounts are in
+// each party's ledger currency.
+export async function buildTransactionsPdf({ rows, filters, organization, branding, template }) {
+  const pdf = new PdfBuilder({ organization, branding, template });
+  const currencies = [...new Set(rows.map((t) => t.vendor.currency))];
+  const sum = (direction) =>
+    rows.filter((t) => t.direction === direction).reduce((s, t) => s + t.amount, 0);
+
+  pdf.header();
+  pdf.titleBlock("Transactions", [
+    ["Period", periodOf(rows)],
+    ["Entries", String(rows.length)],
+    ["Date", formatDate(new Date())],
+  ]);
+  if (filters) pdf.paragraph(`Filtered: ${filters}`);
+  // Totals only add up within one currency.
+  const one = currencies.length === 1 ? currencies[0] : null;
+  if (one) {
+    pdf.figures([
+      ["Received", money(sum("received"), one)],
+      ["Paid", money(sum("paid"), one)],
+      ["Net", money(sum("received") - sum("paid"), one)],
+    ]);
+  }
+  pdf.table({
+    head: ["Date", "Party", "Note", "Bank", "Received", "Paid"],
+    body: rows.map((t) => {
+      const value = money(t.amount, t.vendor.currency);
+      return [
+        formatDate(t.createdAt),
+        clean([t.vendor.name, t.roleLabel]).join("\n"),
+        noteCell(t),
+        t.bankAccount ? `${t.bankAccount.bankName}\n${t.bankAccount.accountNumber}` : t.source ? "" : "Cash",
+        t.direction === "received" ? value : t.direction ? "" : `${t.type === "credit" ? "Credit" : "Debit"} ${value}`,
+        t.direction === "paid" ? value : "",
+      ];
+    }),
+    ...(one ? { foot: ["", "", "Totals", "", money(sum("received"), one), money(sum("paid"), one)] } : {}),
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 36 },
+      3: { cellWidth: 30 },
+      4: { ...right, cellWidth: 28 },
+      5: { ...right, cellWidth: 28 },
+    },
+  });
+  return pdf.output(generatedNote());
+}

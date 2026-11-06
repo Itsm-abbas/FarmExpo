@@ -58,12 +58,16 @@ export const DELETE = withUser(async (req, { user, params }) => {
   const id = parseId(params.id);
   const trader = await findOwned(prisma.trader, id, ownedBy(user));
 
-  const [purchases, entries] = await Promise.all([
+  const [purchases, entries, packings] = await Promise.all([
     prisma.purchase.count({ where: { traderId: id } }),
     trader.vendorId
       ? prisma.transaction.count({ where: { vendorId: trader.vendorId } })
       : 0,
+    prisma.packing.count({ where: { traderId: id } }),
   ]);
+  if (packings) {
+    throw new HttpError(409, `This trader packed ${packings} consignment(s) and cannot be deleted.`);
+  }
   if (purchases) {
     throw new HttpError(409, `This trader has ${purchases} purchase(s) and cannot be deleted.`);
   }

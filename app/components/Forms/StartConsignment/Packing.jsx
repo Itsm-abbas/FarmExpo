@@ -7,7 +7,7 @@ import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import SaveButton from "@components/Button/SaveButton";
 import UpdateConsignment from "@utils/updateConsignment";
-import { fetchPackers } from "@constants/consignmentAPI";
+import { fetchPackers, fetchTraders } from "@constants/consignmentAPI";
 import { useQuery } from "@tanstack/react-query";
 import { getCookie } from "cookies-next";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,28 @@ import {
 import Input from "@components/Input";
 
 const MySwal = withReactContent(Swal);
+
+// Packing is done by a packer, or sometimes by a trader / farmer. Both are
+// shown in one list; `raw` is the record sent back to the API.
+const fromPacker = (p) => ({
+  kind: "packer",
+  key: `packer-${p.id}`,
+  name: p.vendor?.name,
+  station: p.vendor?.station,
+  country: p.vendor?.country,
+  currency: p.vendor?.currency,
+  raw: p,
+});
+const fromTrader = (t, baseCurrency) => ({
+  kind: "trader",
+  key: `trader-${t.id}`,
+  name: t.name,
+  station: "",
+  country: t.country,
+  // A trader without a ledger yet gets one in the base currency.
+  currency: t.vendor?.currency || baseCurrency,
+  raw: t,
+});
 
 const Packing = ({
   consignmentId,
@@ -43,14 +65,19 @@ const Packing = ({
     queryKey: ["packers"],
     queryFn: fetchPackers,
   });
+  const { data: tradersData, isLoading: loadingTraders } = useQuery({
+    queryKey: ["traders"],
+    queryFn: fetchTraders,
+  });
+  const packerOptions = (packersData || []).map(fromPacker);
+  const traderOptions = (tradersData || []).map((t) => fromTrader(t, baseCurrency));
 
   const handlePacker = (e) => {
-    const selectedId = e.target.value;
-    if (selectedId === "add-new-packer") {
+    const key = e.target.value;
+    if (key === "add-new-packer") {
       router.push("/consignment/packer/add-packer");
     } else {
-      const packer = packersData.find((p) => p.id === parseInt(selectedId));
-      setSelectedPacker(packer);
+      setSelectedPacker([...packerOptions, ...traderOptions].find((o) => o.key === key) || null);
     }
   };
 
@@ -68,11 +95,17 @@ const Packing = ({
 
   useEffect(() => {
     if (existingData) {
-      setSelectedPacker(existingData.packer);
+      setSelectedPacker(
+        existingData.trader
+          ? fromTrader(existingData.trader, baseCurrency)
+          : existingData.packer
+            ? fromPacker(existingData.packer)
+            : null
+      );
       setRatePerKg(existingData.ratePerKg);
       setNote(existingData.note || "");
     }
-  }, [existingData]);
+  }, [existingData, baseCurrency]);
 
   const handleSubmit = async () => {
     if (!ratePerKg || selectedPacker === null) {
@@ -114,7 +147,9 @@ const Packing = ({
     setIsLoading(true);
     try {
       const payload = {
-        packer: selectedPacker,
+        ...(selectedPacker.kind === "trader"
+          ? { trader: selectedPacker.raw, packer: null }
+          : { packer: selectedPacker.raw, trader: null }),
         ratePerKg,
         totalCost: totalPackingCost,
         note,
@@ -168,7 +203,7 @@ const Packing = ({
         text: `Packing data ${
           existingData ? "updated" : "added"
         } successfully. Total cost: ${
-          selectedPacker.vendor.currency
+          selectedPacker.currency
         } ${totalPackingCost.toLocaleString()}`,
         showConfirmButton: false,
         timer: 2000,
@@ -205,19 +240,33 @@ const Packing = ({
       </label>
       <select
         id="packers"
-        value={value?.id || ""}
+        value={value?.key || ""}
         onChange={onChange}
         disabled={isLocked || loading}
         className="w-full px-4 py-3 bg-background border border-primary/20 rounded-xl text-text placeholder-text/50 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 font-inter disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="" className="text-text/50">
-          {loading ? "Loading packers..." : "Choose a packer"}
+          {loading ? "Loading packers..." : "Choose a packer or trader"}
         </option>
-        {packersData?.map((p) => (
-          <option key={p.id} value={p.id} className="text-text bg-background">
-            {p.vendor.name} - {p.vendor.station} ({p.vendor.country})
-          </option>
-        ))}
+        {packerOptions.length > 0 && (
+          <optgroup label="Packers">
+            {packerOptions.map((p) => (
+              <option key={p.key} value={p.key} className="text-text bg-background">
+                {p.name} - {p.station} ({p.country})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {traderOptions.length > 0 && (
+          <optgroup label="Traders / farmers">
+            {traderOptions.map((t) => (
+              <option key={t.key} value={t.key} className="text-text bg-background">
+                {t.name}
+                {t.country ? ` (${t.country})` : ""}
+              </option>
+            ))}
+          </optgroup>
+        )}
         <option
           value="add-new-packer"
           className="text-primary font-semibold bg-primary/10 cursor-pointer"
@@ -261,7 +310,7 @@ const Packing = ({
           <CustomSelect
             value={selectedPacker}
             onChange={handlePacker}
-            loading={LoadingPackers}
+            loading={LoadingPackers || loadingTraders}
           />
 
           {/* Selected Packer Details */}
@@ -273,31 +322,33 @@ const Packing = ({
             >
               <h4 className="font-semibold text-text font-poppins mb-3 flex items-center gap-2">
                 <FaTruckLoading className="text-primary" />
-                Packer Details
+                {selectedPacker.kind === "trader" ? "Packed by a trader / farmer" : "Packer Details"}
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-inter">
                 <div>
                   <p className="text-text/70">Name</p>
                   <p className="font-medium text-text">
-                    {selectedPacker.vendor?.name}
+                    {selectedPacker.name}
                   </p>
                 </div>
-                <div>
-                  <p className="text-text/70">Station</p>
-                  <p className="font-medium text-text">
-                    {selectedPacker.vendor?.station}
-                  </p>
-                </div>
+                {selectedPacker.station && (
+                  <div>
+                    <p className="text-text/70">Station</p>
+                    <p className="font-medium text-text">
+                      {selectedPacker.station}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-text/70">Country</p>
                   <p className="font-medium text-text">
-                    {selectedPacker.vendor?.country}
+                    {selectedPacker.country}
                   </p>
                 </div>
                 <div>
                   <p className="text-text/70">Currency</p>
                   <p className="font-medium text-text">
-                    {selectedPacker.vendor?.currency}
+                    {selectedPacker.currency}
                   </p>
                 </div>
               </div>
@@ -312,7 +363,7 @@ const Packing = ({
             >
               <FaDollarSign className="text-primary text-sm" />
               <span>
-                Rate per kg ({selectedPacker?.vendor?.currency || baseCurrency}) *{" "}
+                Rate per kg ({selectedPacker?.currency || baseCurrency}) *{" "}
                 {isLocked && (
                   <span className="text-red-500 text-xs">(Locked)</span>
                 )}
@@ -361,7 +412,7 @@ const Packing = ({
                 <div className="flex justify-between">
                   <span className="text-text/70">Rate:</span>
                   <span className="font-medium text-text">
-                    {selectedPacker?.vendor?.currency || baseCurrency} {ratePerKg} per
+                    {selectedPacker?.currency || baseCurrency} {ratePerKg} per
                     kg
                   </span>
                 </div>
@@ -369,7 +420,7 @@ const Packing = ({
                   <div className="flex justify-between text-lg font-bold">
                     <span className="text-text">Total Packing Cost:</span>
                     <span className="text-green-500">
-                      {selectedPacker?.vendor?.currency || baseCurrency}{" "}
+                      {selectedPacker?.currency || baseCurrency}{" "}
                       {totalPackingCost.toLocaleString()}
                     </span>
                   </div>

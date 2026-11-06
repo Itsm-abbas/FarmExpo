@@ -147,11 +147,13 @@ export const PUT = withUser(async (req, { user }) => {
     amount: entry.amount,
     current: existing,
   });
+  // Sent only when the day changes; otherwise the entry keeps its time.
+  const createdAt = readDate(body.date);
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.transaction.update({
       where: { id: existing.id },
-      data: { ...entry, ...bank },
+      data: { ...entry, ...bank, ...(createdAt ? { createdAt } : {}) },
     });
     // Recomputing fixes balanceAfter on this entry and every later one.
     await recomputeVendorBalance(tx, existing.vendorId);

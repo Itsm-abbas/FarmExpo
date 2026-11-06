@@ -17,6 +17,7 @@ import {
   computeCommercialInvoice,
   computeInvoice,
   defaultCommercialCurrency,
+  pricePerUnit,
   formatDate,
   formatKg,
   suggestedSaleRate,
@@ -170,6 +171,7 @@ function GoodsTable({ rows, totals, total, currency }) {
             <th className="px-2 py-2 text-right font-semibold">Net kg</th>
             <th className="px-2 py-2 text-right font-semibold">Gross kg</th>
             <th className="px-2 py-2 text-right font-semibold">Rate / kg ({currency})</th>
+            <th className="px-2 py-2 text-right font-semibold">Price / qty ({currency})</th>
             <th className="px-2 py-2 text-right font-semibold">Amount ({currency})</th>
           </tr>
         </thead>
@@ -183,6 +185,7 @@ function GoodsTable({ rows, totals, total, currency }) {
               <td className="px-2 py-2 text-right">{qty(g.netWeight)}</td>
               <td className="px-2 py-2 text-right">{qty(g.grossWeight)}</td>
               <td className="px-2 py-2 text-right">{money(g.rate)}</td>
+              <td className="px-2 py-2 text-right">{money(pricePerUnit(g))}</td>
               <td className="px-2 py-2 text-right font-medium text-gray-900">{money(g.amount)}</td>
             </tr>
           ))}
@@ -195,6 +198,7 @@ function GoodsTable({ rows, totals, total, currency }) {
             <td className="px-2 py-2 text-right">{totals.quantity.toLocaleString("en-US")}</td>
             <td className="px-2 py-2 text-right">{qty(totals.netWeight)}</td>
             <td className="px-2 py-2 text-right">{qty(totals.grossWeight)}</td>
+            <td className="px-2 py-2" />
             <td className="px-2 py-2" />
             <td className="px-2 py-2 text-right">{money(total)}</td>
           </tr>
@@ -660,7 +664,7 @@ function InvoicePage() {
             organization={organization}
             onLetterhead={onLetterhead}
           />
-          <Shipment invoice={invoice} />
+          {kind !== "commercial" && <Shipment invoice={invoice} />}
 
           <section>
             <SectionTitle>Goods</SectionTitle>
