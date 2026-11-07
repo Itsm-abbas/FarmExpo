@@ -156,8 +156,9 @@ function Shipment({ invoice }) {
   );
 }
 
-// Goods table; `rows` carry `rate` and `amount` in `currency`.
-function GoodsTable({ rows, totals, total, currency }) {
+// Goods table; `rows` carry `rate` and `amount` in `currency`. `boxPrice`
+// adds the packaging cost per box (local invoice only).
+function GoodsTable({ rows, totals, total, currency, boxPrice = false }) {
   if (rows.length === 0) return <p className="text-gray-500">No items on this consignment yet.</p>;
   return (
     <div className="overflow-x-auto">
@@ -171,6 +172,7 @@ function GoodsTable({ rows, totals, total, currency }) {
             <th className="px-2 py-2 text-right font-semibold">Net kg</th>
             <th className="px-2 py-2 text-right font-semibold">Gross kg</th>
             <th className="px-2 py-2 text-right font-semibold">Rate / kg ({currency})</th>
+            {boxPrice && <th className="px-2 py-2 text-right font-semibold">Box price ({currency})</th>}
             <th className="px-2 py-2 text-right font-semibold">Price / qty ({currency})</th>
             <th className="px-2 py-2 text-right font-semibold">Amount ({currency})</th>
           </tr>
@@ -185,6 +187,7 @@ function GoodsTable({ rows, totals, total, currency }) {
               <td className="px-2 py-2 text-right">{qty(g.netWeight)}</td>
               <td className="px-2 py-2 text-right">{qty(g.grossWeight)}</td>
               <td className="px-2 py-2 text-right">{money(g.rate)}</td>
+              {boxPrice && <td className="px-2 py-2 text-right">{money(g.packagingPerUnit)}</td>}
               <td className="px-2 py-2 text-right">{money(pricePerUnit(g))}</td>
               <td className="px-2 py-2 text-right font-medium text-gray-900">{money(g.amount)}</td>
             </tr>
@@ -199,6 +202,7 @@ function GoodsTable({ rows, totals, total, currency }) {
             <td className="px-2 py-2 text-right">{qty(totals.netWeight)}</td>
             <td className="px-2 py-2 text-right">{qty(totals.grossWeight)}</td>
             <td className="px-2 py-2" />
+            {boxPrice && <td className="px-2 py-2" />}
             <td className="px-2 py-2" />
             <td className="px-2 py-2 text-right">{money(total)}</td>
           </tr>
@@ -671,7 +675,7 @@ function InvoicePage() {
             {kind === "commercial" && commercial ? (
               <GoodsTable rows={commercial.goods} totals={invoice.totals} total={commercial.total} currency={commercial.currency} />
             ) : (
-              <GoodsTable rows={localRows} totals={invoice.totals} total={invoice.totals.goodsCost} currency={currency} />
+              <GoodsTable rows={localRows} totals={invoice.totals} total={invoice.totals.goodsCost} currency={currency} boxPrice />
             )}
           </section>
 

@@ -196,7 +196,11 @@ const orgSubtitle = (org) =>
 // commercial invoice: selling rates and the consignee's account, without
 // purchase rates, airway bill charges, instruments or costs.
 export function exportInvoiceExcel({ invoice, organization, currency, includeCosts = true, commercial = null, filename }) {
-  const b = new SheetBuilder([6, 24, 16, 10, 12, 14, 14, 16, 16, 18], organization?.brandColor);
+  // The local invoice has one more goods column (box price).
+  const b = new SheetBuilder(
+    commercial ? [6, 24, 16, 10, 12, 14, 14, 16, 16, 18] : [6, 24, 16, 10, 12, 14, 14, 16, 16, 16, 18],
+    organization?.brandColor
+  );
   // GD amounts are in the financial instrument's currency (older GDs: the consignee's).
   const foreign = invoice.goodsDeclaration?.currency || invoice.consigneeCurrency;
   const goodsCurrency = commercial ? commercial.currency : currency;
@@ -259,6 +263,8 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       { header: "Net kg", key: "netWeight", format: KG, total: "sum" },
       { header: "Gross kg", key: "grossWeight", format: KG, total: "sum" },
       { header: `Rate / kg (${goodsCurrency})`, key: "rate", format: MONEY },
+      // Box price is a cost, so only the local invoice shows it.
+      ...(commercial ? [] : [{ header: `Box price (${goodsCurrency})`, key: "packagingPerUnit", format: MONEY }]),
       { header: `Price / qty (${goodsCurrency})`, key: pricePerUnit, format: MONEY },
       { header: `Amount (${goodsCurrency})`, key: "amount", format: MONEY, total: "sum" },
     ],

@@ -600,7 +600,12 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
 
   pdf.sectionTitle("Goods", pdf.tableHeight(Math.min(invoice.goods.length, 3)));
   pdf.table({
-    head: ["#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${goodsCurrency})`, `Price / qty (${goodsCurrency})`, `Amount (${goodsCurrency})`],
+    head: [
+      "#", "Item", "Packaging", "Qty", "Kg / unit", "Net kg", "Gross kg", `Rate / kg (${goodsCurrency})`,
+      // Box price is a cost, so only the local invoice shows it.
+      ...(commercial ? [] : [`Box price (${goodsCurrency})`]),
+      `Price / qty (${goodsCurrency})`, `Amount (${goodsCurrency})`,
+    ],
     body: goodsRows.map((g) => [
       g.index,
       g.name,
@@ -610,6 +615,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       g.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       g.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       money(g.rate),
+      ...(commercial ? [] : [money(g.packagingPerUnit)]),
       money(pricePerUnit(g)),
       money(g.amount),
     ]),
@@ -622,6 +628,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       invoice.totals.netWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       invoice.totals.grossWeight.toLocaleString("en-US", { maximumFractionDigits: 2 }),
       "",
+      ...(commercial ? [] : [""]),
       "",
       money(goodsTotal),
     ],
@@ -634,6 +641,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       7: right,
       8: right,
       9: right,
+      10: right,
     },
   });
 
