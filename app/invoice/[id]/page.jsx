@@ -243,7 +243,7 @@ function useCommercialDraft(invoice, baseCurrency) {
       Boolean(invoice.consignee) &&
       sameCode(invoice.consigneeCurrency, currency) &&
       (!invoice.consigneeAmount || Math.abs(invoice.consigneeAmount - savedTotal) < 0.005);
-    return { currency, rates, billConsignee };
+    return { currency, rates, perQty: perQtyFrom(invoice, rates), billConsignee };
   }, [invoice, baseCurrency]);
 
   const [draft, setDraft] = useState(null);
@@ -275,13 +275,33 @@ function useCommercialDraft(invoice, baseCurrency) {
         }
       }
       const canBill = Boolean(invoice.consignee) && sameCode(invoice.consigneeCurrency, currency);
-      return { ...d, currency, rates, billConsignee: canBill && d.billConsignee };
+      return { ...d, currency, rates, perQty: perQtyFrom(invoice, rates), billConsignee: canBill && d.billConsignee };
     });
-  const setRate = (id, value) => setDraft((d) => ({ ...d, rates: { ...d.rates, [id]: value } }));
+  // The rate per kg is what is saved; the rate per quantity is worked out
+  // from it, or typed and turned into a rate per kg.
+  const setRate = (id, value) =>
+    setDraft((d) => {
+      const g = invoice.goods.find((item) => item.id === id);
+      return { ...d, rates: { ...d.rates, [id]: value }, perQty: { ...d.perQty, [id]: perQtyOf(g, value) } };
+    });
+  const setPerQty = (id, value) =>
+    setDraft((d) => {
+      const g = invoice.goods.find((item) => item.id === id);
+      return { ...d, perQty: { ...d.perQty, [id]: value }, rates: { ...d.rates, [id]: perKgOf(g, value) } };
+    });
   const setBill = (billConsignee) => setDraft((d) => ({ ...d, billConsignee }));
 
-  return { draft, dirty, setCurrency, setRate, setBill };
+  return { draft, dirty, setCurrency, setRate, setPerQty, setBill };
 }
+
+// Converts between a rate per kg and a rate per unit of quantity (box,
+// crate…) using the item's net kg per unit. Inputs and results are strings.
+const perQtyOf = (g, perKg) =>
+  perKg === "" || !g?.netPerUnit ? "" : String(Math.round(Number(perKg) * g.netPerUnit * 100) / 100);
+const perKgOf = (g, perQty) =>
+  perQty === "" || !g?.netPerUnit ? "" : String(Math.round((Number(perQty) / g.netPerUnit) * 1e8) / 1e8);
+const perQtyFrom = (invoice, rates) =>
+  Object.fromEntries(invoice.goods.map((g) => [g.id, perQtyOf(g, rates[g.id])]));
 
 function InvoicePage() {
   const { id } = useParams();
@@ -307,7 +327,7 @@ function InvoicePage() {
     () => (consignment ? computeInvoice(consignment) : null),
     [consignment]
   );
-  const { draft, dirty, setCurrency, setRate, setBill } = useCommercialDraft(
+  const { draft, dirty, setCurrency, setRate, setPerQty, setBill } = useCommercialDraft(
     sessionLoading ? null : invoice,
     currency
   );
@@ -553,22 +573,25 @@ function InvoicePage() {
                 <p className="text-sm text-text/60">Add items to the consignment to price them.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[480px] text-sm">
+                  <table className="w-full min-w-[600px] text-sm">
                     <thead>
                       <tr className="border-b border-text/10 text-left text-xs text-text/55">
                         <th className="py-2 pr-3 font-medium">Item</th>
+                        <th className="px-3 py-2 text-right font-medium">Qty</th>
                         <th className="px-3 py-2 text-right font-medium">Net kg</th>
-                        <th className="px-3 py-2 text-right font-medium">Bought at ({currency})</th>
-                        <th className="py-2 pl-3 text-right font-medium">Sell at ({draft.currency}) / kg</th>
+                        <th className="px-3 py-2 text-right font-medium">Bought at ({currency}) / kg</th>
+                        <th className="px-3 py-2 text-right font-medium">Sell at ({draft.currency}) / kg</th>
+                        <th className="py-2 pl-3 text-right font-medium">Sell at ({draft.currency}) / qty</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-text/10">
                       {invoice.goods.map((g) => (
                         <tr key={g.id}>
                           <td className="py-2 pr-3 text-text">{g.name}</td>
+                          <td className="px-3 py-2 text-right tabular text-text/75">{g.quantity.toLocaleString("en-US")}</td>
                           <td className="px-3 py-2 text-right tabular text-text/75">{qty(g.netWeight)}</td>
                           <td className="px-3 py-2 text-right tabular text-text/75">{money(g.ratePerKg)}</td>
-                          <td className="py-2 pl-3 text-right">
+                          <td className="px-3 py-2 text-right">
                             <input
                               type="number"
                               min="0"
@@ -578,6 +601,20 @@ function InvoicePage() {
                               value={draft.rates[g.id]}
                               onChange={(e) => setRate(g.id, e.target.value)}
                               className="w-32 rounded-lg border border-text/15 bg-surface px-3 py-1.5 text-right text-sm tabular text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </td>
+                          <td className="py-2 pl-3 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              inputMode="decimal"
+                              aria-label={`Selling rate per quantity for ${g.name}`}
+                              value={draft.perQty[g.id]}
+                              onChange={(e) => setPerQty(g.id, e.target.value)}
+                              disabled={!g.netPerUnit}
+                              title={g.netPerUnit ? undefined : "Set the kg per unit on this item first"}
+                              className="w-32 rounded-lg border border-text/15 bg-surface px-3 py-1.5 text-right text-sm tabular text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                             />
                           </td>
                         </tr>
