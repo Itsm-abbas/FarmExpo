@@ -93,7 +93,7 @@ export default function ProfileSettings() {
     }
   };
 
-  if (isLoading) return <PageLoader label="Loading your profile…" />;
+  if (isLoading) return <PageLoader label="Loading your profile…" variant="form" />;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-8 sm:py-10">

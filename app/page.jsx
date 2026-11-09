@@ -15,11 +15,12 @@ import {
   LuX,
 } from "react-icons/lu";
 import axiosInstance from "@utils/axiosConfig";
-import { fetchConsignments } from "@constants/consignmentAPI";
 import { listQueries, queryKeys } from "@hooks/queries";
 import useSession from "@hooks/useSession";
 import { formatMoney } from "@utils/money";
 import { Button, Field, inputClass } from "@components/Page";
+import DataLoader from "@components/Loader/dataLoader";
+import { Skeleton } from "@components/Loader/Skeleton";
 
 const STAGES = [
   { status: "Not started", label: "Not started", note: "Dated, waiting for items and partners" },
@@ -110,10 +111,10 @@ export default function Dashboard() {
   const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newNumber, setNewNumber] = useState("");
 
-  const { data: consignments = [], isLoading } = useQuery({
-    queryKey: queryKeys.consignments,
-    queryFn: fetchConsignments,
-  });
+  // Only number, date, stage and consignee: far smaller than full records.
+  const { data: consignments = [], isLoading, isError, refetch, isRefetching } = useQuery(
+    listQueries.consignmentSummaries
+  );
   const { data: vendors = [], isLoading: vendorsLoading } = useQuery({
     queryKey: queryKeys.vendors,
     queryFn: async () => (await axiosInstance.get("/vendors/transactions")).data,
@@ -149,6 +150,7 @@ export default function Dashboard() {
       // without fetching it again.
       queryClient.setQueryData(queryKeys.consignment(data.id), data);
       queryClient.setQueryData(queryKeys.consignments, (prev) => (prev ? [data, ...prev] : prev));
+      queryClient.setQueryData(queryKeys.consignmentSummaries, (prev) => (prev ? [data, ...prev] : prev));
       router.push(`/items-selection/${data.id}`);
     },
     // Shown in the dialog (e.g. a number that is already used).
@@ -203,17 +205,25 @@ export default function Dashboard() {
 
       {/* Pipeline: the consignment lifecycle, one stage per column */}
       <section aria-labelledby="pipeline-title" className="rounded-2xl border border-text/10 bg-surface">
-        <div className="flex items-center justify-between px-5 pt-5 sm:px-7">
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 sm:px-7">
           <h2 id="pipeline-title" className="text-sm font-semibold text-text">
             Consignment pipeline
           </h2>
+          {isError && (
+            <p role="alert" className="flex items-center gap-2 text-xs text-red-600">
+              Couldn’t load the counts.
+              <button onClick={() => refetch()} disabled={isRefetching} className="font-medium text-primary hover:underline disabled:opacity-60">
+                {isRefetching ? "Retrying…" : "Try again"}
+              </button>
+            </p>
+          )}
           {stageFilter !== null && (
             <button onClick={() => setStageFilter(null)} className="flex items-center gap-1 text-xs font-medium text-text/60 hover:text-text">
               <LuX className="h-3.5 w-3.5" /> Show all
             </button>
           )}
         </div>
-        <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-b-2xl md:grid-cols-4">
+        <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-b-2xl md:grid-cols-4" aria-busy={isLoading}>
           {STAGES.map((stage, i) => {
             const selected = stageFilter === i;
             const isPending = i === 1;
@@ -239,9 +249,14 @@ export default function Dashboard() {
                       }`}
                     />
                   </span>
-                  <span className="font-display text-[3.25rem] font-semibold leading-none tabular text-text">
-                    {isLoading ? "–" : counts[i]}
-                  </span>
+                  {/* Placeholder until the count is known, never a misleading 0 */}
+                  {isLoading ? (
+                    <Skeleton className="h-[3.25rem] w-16 rounded-lg" />
+                  ) : (
+                    <span className="font-display text-[3.25rem] font-semibold leading-none tabular text-text">
+                      {isError ? "—" : counts[i]}
+                    </span>
+                  )}
                   <span className={`mt-3 text-sm font-semibold ${selected ? "text-primary" : "text-text"}`}>
                     {stage.label}
                   </span>
@@ -282,7 +297,12 @@ export default function Dashboard() {
           </Link>
         </div>
         {isLoading ? (
-          <p className="px-5 py-8 text-sm text-text/55">Loading consignments…</p>
+          <DataLoader rows={5} cols={5} />
+        ) : isError ? (
+          <p role="alert" className="px-5 py-10 text-center text-sm text-red-600">
+            Couldn’t load consignments. Check your connection and{" "}
+            <button onClick={() => refetch()} className="font-medium text-primary hover:underline">try again</button>.
+          </p>
         ) : visible.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <p className="text-sm text-text/65">

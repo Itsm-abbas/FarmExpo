@@ -25,7 +25,7 @@ import {
 import { formatMoney } from "@utils/money";
 import { INVOICE_TEMPLATES } from "@constants/invoiceTemplates";
 import { Button, CurrencySelect, PageHeader, Panel } from "@components/Page";
-import DataLoader from "@components/Loader/dataLoader";
+import PageLoader from "@components/Loader/PageLoader";
 
 const money = (value, currency) => formatMoney(value, currency, { decimals: 2 });
 const qty = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -136,7 +136,7 @@ function Shipment({ invoice }) {
   if (!awb && !gd) return null;
   return (
     <section>
-      <SectionTitle>Shipment</SectionTitle>
+      <SectionTitle>Shipment details</SectionTitle>
       <dl className="grid gap-x-10 sm:grid-cols-2">
         <div>
           <Line label="Airway bill" value={awb?.number} />
@@ -208,6 +208,27 @@ function GoodsTable({ rows, totals, total, currency, boxPrice = false }) {
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+// The signature line; the uploaded signature is shown on it when `signed`.
+function Signature({ organization, signed }) {
+  const image = signed ? organization?.signatureUrl : null;
+  return (
+    <div className="flex justify-end pt-4">
+      <div className="w-60 text-xs text-gray-500">
+        <div className="flex h-20 items-end justify-center">
+          {image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt="Authorised signature" className="max-h-20 max-w-full object-contain" />
+          )}
+        </div>
+        <div className="border-t border-gray-900 pt-1">
+          <p>For {organization?.name || "the exporter"}</p>
+          <p>Authorised signature</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -444,7 +465,7 @@ function InvoicePage() {
     });
   };
 
-  if (isLoading) return <DataLoader />;
+  if (isLoading) return <PageLoader label="Loading the invoice…" variant="document" />;
   if (isError || !invoice) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-8">
@@ -774,6 +795,10 @@ function InvoicePage() {
           )}
 
           <Notes organization={organization} />
+          <Signature
+            organization={organization}
+            signed={kind === "commercial" || organization?.signatureOn === "all"}
+          />
         </div>
       </article>
     </div>
@@ -799,7 +824,7 @@ function TemplateNote({ template, onLetterhead, isAdmin }) {
 // useSearchParams needs a Suspense boundary.
 export default function Page() {
   return (
-    <Suspense fallback={<DataLoader />}>
+    <Suspense fallback={<PageLoader label="Loading the invoice…" variant="document" />}>
       <InvoicePage />
     </Suspense>
   );

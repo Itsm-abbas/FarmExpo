@@ -49,6 +49,10 @@ model Organization {
   letterheadBottom Int      @default(30)
   // Printed at the end of invoices, e.g. bank details or terms.
   invoiceNotes     String?
+  // Signature image (data URL: png/jpeg/webp) printed on invoices, served by
+  // /api/organization/signature. signatureOn: "commercial" | "all" invoices.
+  signature        String?
+  signatureOn      String   @default("commercial")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -181,7 +185,7 @@ model Transaction {
   bankAmount    Float?
   createdAt     DateTime     @default(now())
 
-  @@index([vendorId])
+  @@index([vendorId, createdAt])
   @@index([consignmentId])
   @@index([purchaseId])
   @@index([bankAccountId])
@@ -468,6 +472,8 @@ model ConsignmentItem {
   consignment   Consignment @relation(fields: [consignmentId], references: [id])
   commodityItem Commodity   @relation(fields: [commodityItemId], references: [id])
   packaging     Packaging   @relation(fields: [packagingId], references: [id])
+
+  @@index([consignmentId])
 }
 
 model Consignment {

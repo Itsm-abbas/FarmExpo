@@ -79,7 +79,7 @@ export default function BankingPage() {
     create.mutate(form);
   };
 
-  if (isLoading) return <PageLoader label="Loading bank accounts…" />;
+  if (isLoading) return <PageLoader label="Loading bank accounts…" variant="cards" />;
 
   // Totals per currency: accounts in different currencies don't add up.
   const byCurrency = accounts

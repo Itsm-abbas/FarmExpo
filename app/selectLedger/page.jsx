@@ -67,7 +67,7 @@ export default function LedgerSelection() {
                 whileHover={{ scale: 1.02 }}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.2 + index * 0.1 }}
+                transition={{ duration: 0.3, delay: 0.1 + Math.min(index, 6) * 0.04 }}
               >
                 <span className="text-lg text-gray-800 dark:text-white">
                   Consignment {consignment.number || `#${consignment.id}`}

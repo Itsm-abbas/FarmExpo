@@ -7,6 +7,7 @@ import { LuKeyRound, LuShieldCheck, LuTrash2, LuUser } from "react-icons/lu";
 import useSession from "@hooks/useSession";
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
+import { SkeletonList } from "@components/Loader/Skeleton";
 
 const swalTheme = {
   background: "rgb(var(--color-surface))",
@@ -198,7 +199,7 @@ export default function TeamPage() {
 
         <Panel title={`Members${members.length ? ` (${members.length})` : ""}`}>
           {isLoading ? (
-            <p className="text-sm text-text/60">Loading the team…</p>
+            <SkeletonList rows={4} />
           ) : (
             <ul className="-my-2 divide-y divide-text/10">
               {members.map((m) => (

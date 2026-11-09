@@ -430,7 +430,7 @@ export default function AllConsignments() {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                            transition={{ duration: 0.3, delay: Math.min(index, 6) * 0.04 }}
                             className="hover:bg-primary/5 transition-colors duration-200 group"
                           >
                             <td className="px-4 py-4 font-inter text-text font-medium">
@@ -534,7 +534,7 @@ export default function AllConsignments() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    transition={{ duration: 0.3, delay: Math.min(index, 6) * 0.04 }}
                     className="bg-background rounded-xl border border-primary/20 shadow-lg p-4 space-y-3"
                   >
                     {/* Header */}

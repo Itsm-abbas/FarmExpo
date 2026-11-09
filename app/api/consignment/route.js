@@ -23,11 +23,25 @@ export const POST = withUser(async (req, { user }) => {
   return NextResponse.json(created);
 });
 
+// Only what lists show (the dashboard), much smaller than full records.
+const SUMMARY_SELECT = {
+  id: true,
+  number: true,
+  date: true,
+  status: true,
+  createdAt: true,
+  consignee: {
+    select: { id: true, vendor: { select: { id: true, name: true, station: true, country: true } } },
+  },
+};
+
+// ?view=summary returns SUMMARY_SELECT; otherwise full records.
 export const GET = withUser(async (req, { user }) => {
+  const summary = new URL(req.url).searchParams.get("view") === "summary";
   const consignments = await prisma.consignment.findMany({
     where: ownedBy(user),
     orderBy: { createdAt: "desc" },
-    include: CONSIGNMENT_INCLUDE,
+    ...(summary ? { select: SUMMARY_SELECT } : { include: CONSIGNMENT_INCLUDE }),
   });
 
   return NextResponse.json(consignments);

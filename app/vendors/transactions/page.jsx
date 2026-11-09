@@ -238,20 +238,20 @@ export default function VendorsTransactionsPage() {
                   key={index}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-background border-2 border-primary/20 rounded-2xl p-6 animate-pulse"
+                  transition={{ delay: Math.min(index, 6) * 0.04 }}
+                  className="bg-background border-2 border-primary/20 rounded-2xl p-6"
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <div className="h-4 bg-text/20 rounded w-24 mb-2"></div>
-                      <div className="h-3 bg-text/20 rounded w-16"></div>
+                      <div className="h-4 skeleton w-24 mb-2"></div>
+                      <div className="h-3 skeleton w-16"></div>
                     </div>
                     <div className="text-right">
-                      <div className="h-3 bg-text/20 rounded w-12 mb-1"></div>
-                      <div className="h-4 bg-text/20 rounded w-16"></div>
+                      <div className="h-3 skeleton w-12 mb-1"></div>
+                      <div className="h-4 skeleton w-16"></div>
                     </div>
                   </div>
-                  <div className="h-3 bg-text/20 rounded w-20"></div>
+                  <div className="h-3 skeleton w-20"></div>
                 </motion.div>
               ))}
             </div>
@@ -264,7 +264,7 @@ export default function VendorsTransactionsPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    transition={{ duration: 0.4, delay: Math.min(index, 6) * 0.04 }}
                     whileHover={{ y: -4, scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >

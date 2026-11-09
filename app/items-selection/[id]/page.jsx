@@ -459,7 +459,7 @@ export default function ItemSelectionPage() {
                     onClick={() => handleItemSelect(item)}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    transition={{ duration: 0.4, delay: Math.min(index, 6) * 0.04 }}
                     whileHover={{
                       scale: 1.02,
                       y: -2,
@@ -617,7 +617,7 @@ export default function ItemSelectionPage() {
                               key={detail.id || index}
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
-                              transition={{ delay: index * 0.1 }}
+                              transition={{ delay: Math.min(index, 6) * 0.04 }}
                               className="hover:bg-primary/5 transition-colors"
                             >
                               <td className="px-4 py-3 text-text font-medium">

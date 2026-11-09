@@ -140,6 +140,7 @@ const EMPTY = {
   letterheadTop: 45,
   letterheadBottom: 30,
   invoiceNotes: "",
+  signatureOn: "commercial",
 };
 
 // Miniature of each template's layout, for the picker.
@@ -176,6 +177,8 @@ export default function OrganizationSettings() {
   // undefined: unchanged, null: remove, string: new data URL
   const [logo, setLogo] = useState(undefined);
   const [letterhead, setLetterhead] = useState(undefined);
+  const [signature, setSignature] = useState(undefined);
+  const signatureInput = useRef(null);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [message, setMessage] = useState(null);
@@ -195,6 +198,7 @@ export default function OrganizationSettings() {
     });
     setLogo(undefined);
     setLetterhead(undefined);
+    setSignature(undefined);
   }
 
   // The letterhead as it will be saved: a new upload, removed, or the stored one.
@@ -240,6 +244,7 @@ export default function OrganizationSettings() {
       await pdf.openPdfInNewTab(async () => {
         const branding = await pdf.loadBranding(draft, {
           logo: logo === undefined ? undefined : logo,
+          signature: signature === undefined ? undefined : signature,
           useLetterhead: form.useLetterhead && Boolean(letterheadType),
           letterhead: letterhead || undefined,
         });
@@ -271,6 +276,18 @@ export default function OrganizationSettings() {
     }
   };
 
+  const pickSignature = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setSignature(await readLogo(file));
+      setMessage(null);
+    } catch (err) {
+      setMessage({ tone: "error", text: err.message });
+    }
+  };
+
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -286,6 +303,7 @@ export default function OrganizationSettings() {
           letterheadBottom: Number(form.letterheadBottom),
           useLetterhead: form.useLetterhead && Boolean(letterheadType),
           ...(logo !== undefined && { logo }),
+          ...(signature !== undefined && { signature }),
           ...(letterhead !== undefined && { letterhead }),
         }),
       });
@@ -302,7 +320,7 @@ export default function OrganizationSettings() {
     }
   };
 
-  if (isLoading) return <PageLoader label="Loading organization settings…" />;
+  if (isLoading) return <PageLoader label="Loading organization settings…" variant="form" />;
 
   if (organization && !isAdmin) {
     return (
@@ -315,6 +333,8 @@ export default function OrganizationSettings() {
     );
   }
 
+  const previewSignatureUrl =
+    signature === undefined ? organization?.signatureUrl : signature || null;
   const previewLogoUrl =
     logo === undefined ? organization?.logoUrl : logo || null;
   const preview = form.brandColor ? brandColors(form.brandColor, "light") : null;
@@ -597,6 +617,58 @@ export default function OrganizationSettings() {
               <p className="-mt-2 text-xs text-text/55">
                 The shaded bands: content starts below your header and stays above your footer.
               </p>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-5 sm:flex-row sm:items-start">
+            <div className="grid h-24 w-56 shrink-0 place-items-center overflow-hidden rounded-xl border border-dashed border-text/25 bg-white">
+              {previewSignatureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewSignatureUrl} alt="Signature preview" className="h-full w-full object-contain p-2" />
+              ) : (
+                <span className="text-xs text-gray-400">No signature</span>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-text">Signature</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-text/60">
+                  A photo or scan of the authorised signature (PNG with a transparent background looks best).
+                  It is placed on the signature line of invoices automatically.
+                </p>
+              </div>
+              <input
+                ref={signatureInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={pickSignature}
+                className="sr-only"
+                id="signature"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => signatureInput.current?.click()}>
+                  <LuUpload className="h-4 w-4" />
+                  {previewSignatureUrl ? "Replace signature" : "Upload signature"}
+                </Button>
+                {previewSignatureUrl && (
+                  <Button variant="ghost" onClick={() => setSignature(null)}>
+                    <LuTrash2 className="h-4 w-4" /> Remove
+                  </Button>
+                )}
+              </div>
+              <Field label="Sign" htmlFor="signatureOn">
+                <select
+                  id="signatureOn"
+                  name="signatureOn"
+                  value={form.signatureOn}
+                  onChange={update}
+                  disabled={!previewSignatureUrl}
+                  className={`${inputClass} max-w-xs`}
+                >
+                  <option value="commercial">Commercial invoices only</option>
+                  <option value="all">Commercial and local invoices</option>
+                </select>
+              </Field>
             </div>
           </div>
 

@@ -452,7 +452,7 @@ export default function StartConsignmentPage() {
                 ref={(el) => (accordionRefs.current[form.id] = el)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.06 }}
+                transition={{ duration: 0.4, delay: Math.min(index, 6) * 0.04 }}
                 className="bg-background rounded-2xl border border-primary/20 shadow-lg overflow-hidden"
               >
                 {/* Accordion Header */}

@@ -235,7 +235,7 @@ export default function PackagingForm({
                   key={item.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  transition={{ duration: 0.5, delay: Math.min(index, 6) * 0.04 }}
                   className="bg-primary/5 rounded-xl p-6 border border-primary/20"
                 >
                   <div className="flex items-center justify-between mb-4">

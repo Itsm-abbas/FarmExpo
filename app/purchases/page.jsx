@@ -13,6 +13,7 @@ import { formatMoney } from "@utils/money";
 import { daysBefore, formatDay, formatKg, today } from "@utils/days";
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
+import DataLoader from "@components/Loader/dataLoader";
 
 const swalTheme = {
   background: "rgb(var(--color-surface))",
@@ -306,7 +307,7 @@ function PurchasesPage() {
 
         <div className={`mt-5 overflow-x-auto transition-opacity ${isFetching && !isLoading ? "opacity-60" : ""}`} aria-busy={isFetching}>
           {isLoading ? (
-            <p role="status" className="py-8 text-center text-sm text-text/55">Loading purchases…</p>
+            <DataLoader rows={8} cols={6} />
           ) : purchases.length === 0 ? (
             <p className="py-8 text-center text-sm text-text/60">
               No purchases in this period. Record one above.

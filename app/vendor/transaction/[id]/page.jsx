@@ -23,17 +23,45 @@ import {
 } from "react-icons/fa";
 
 import DataLoader from "@components/Loader/dataLoader";
-import Loading from "app/loading";
 import useSession from "@hooks/useSession";
 import { listQueries, markLedgerChanged } from "@hooks/queries";
 import { bankLabel, bankTypeFor, sameCurrency } from "@utils/banking";
+import { DATE_PRESETS, formatDay, presetRange } from "@utils/days";
+import PageLoader from "@components/Loader/PageLoader";
 
 const errorText = async (res, fallback) => {
   const body = await res.json().catch(() => ({}));
   return typeof body.error === "string" ? body.error : fallback;
 };
 
-const NO_FILTERS = { text: "", type: "", kind: "", from: "", to: "", min: "", max: "" };
+// `period` is a DATE_PRESETS id, "custom" for hand-picked dates, or "" (all time).
+const NO_FILTERS = { text: "", type: "", kind: "", period: "", from: "", to: "", min: "", max: "" };
+
+const KIND_LABELS = { manual: "added by hand", consignment: "from consignments", purchase: "from purchases" };
+
+// The filters in words, printed on exported statements.
+function describeFilters(f, currency) {
+  const fmt = (day) => formatDay(day);
+  const preset = DATE_PRESETS.find((p) => p.id === f.period);
+  return [
+    preset
+      ? `${preset.label} (${fmt(f.from)} to ${fmt(f.to)})`
+      : f.from && f.to
+      ? `${fmt(f.from)} to ${fmt(f.to)}`
+      : f.from
+      ? `from ${fmt(f.from)}`
+      : f.to && `up to ${fmt(f.to)}`,
+    f.type && (f.type === "credit" ? "credits only" : "debits only"),
+    f.kind && KIND_LABELS[f.kind],
+    f.text && `matching "${f.text}"`,
+    f.min !== "" && `at least ${currency} ${f.min}`,
+    f.max !== "" && `at most ${currency} ${f.max}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+const byDate = (a, b) => new Date(a.createdAt) - new Date(b.createdAt) || a.id - b.id;
 
 // The calendar day an entry was recorded, on this device ("YYYY-MM-DD").
 const entryDay = (t) => new Date(t.createdAt).toLocaleDateString("en-CA");
@@ -183,7 +211,27 @@ export default function VendorTransactionPage() {
   );
   const visibleCredits = visible.filter((t) => t.type === "credit").reduce((s, t) => s + t.amount, 0);
   const visibleDebits = visible.filter((t) => t.type === "debit").reduce((s, t) => s + t.amount, 0);
-  const setFilter = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const setFilter = (e) => {
+    const { name, value } = e.target;
+    // Picking a date by hand switches the period to "Custom dates".
+    setFilters((f) => ({ ...f, [name]: value, ...((name === "from" || name === "to") && { period: "custom" }) }));
+  };
+  const setPeriod = (e) => {
+    const period = e.target.value;
+    setFilters((f) => ({ ...f, period, ...(period === "custom" ? {} : presetRange(period)) }));
+  };
+
+  // Balances for the chosen dates: the balance before the first day and after
+  // the last day, whatever the other filters are.
+  const periodBalances = useMemo(() => {
+    if (!data?.vendor) return null;
+    const all = [...data.transactions].sort(byDate);
+    const before = filters.from ? all.filter((t) => entryDay(t) < filters.from) : [];
+    const upTo = filters.to ? all.filter((t) => entryDay(t) <= filters.to) : all;
+    const opening = before.length ? before[before.length - 1].balanceAfter : data.vendor.openingBalance || 0;
+    const closing = upTo.length ? upTo[upTo.length - 1].balanceAfter : data.vendor.openingBalance || 0;
+    return { opening, closing };
+  }, [data, filters.from, filters.to]);
 
   const [editForm, setEditForm] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
@@ -204,7 +252,9 @@ export default function VendorTransactionPage() {
         const { exportStatementExcel } = await import("@utils/excel");
         exportStatementExcel({
           vendor: data.vendor,
-          transactions: data.transactions,
+          transactions: visible,
+          filters: filtering ? describeFilters(filters, data.vendor.currency) : "",
+          ...periodBalances,
           organization,
           filename: `${name}.xlsx`,
         });
@@ -212,7 +262,9 @@ export default function VendorTransactionPage() {
         const branding = await pdf.loadBranding(organization);
         const bytes = await pdf.buildStatementPdf({
           vendor: data.vendor,
-          transactions: data.transactions,
+          transactions: visible,
+          filters: filtering ? describeFilters(filters, data.vendor.currency) : "",
+          ...periodBalances,
           organization,
           branding,
         });
@@ -458,7 +510,7 @@ export default function VendorTransactionPage() {
   };
 
   if (isLoading) {
-    return <Loading />;
+    return <PageLoader label="Loading the ledger…" variant="ledger" />;
   }
 
   return (
@@ -772,7 +824,7 @@ export default function VendorTransactionPage() {
               <>
               <div className="border-b border-primary/10 p-4 sm:p-5 space-y-3" role="search" aria-label="Search this ledger">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <label className="sm:col-span-2 text-xs font-medium text-text/70">
+                  <label className="sm:col-span-2 lg:col-span-3 text-xs font-medium text-text/70">
                     Search
                     <input
                       name="text"
@@ -798,6 +850,16 @@ export default function VendorTransactionPage() {
                       <option value="manual">Added by hand</option>
                       <option value="consignment">From consignments</option>
                       <option value="purchase">From purchases</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-text/70">
+                    Period
+                    <select name="period" value={filters.period} onChange={setPeriod} className={`${filterInput} mt-1`}>
+                      <option value="">All time</option>
+                      {DATE_PRESETS.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                      <option value="custom">Custom dates</option>
                     </select>
                   </label>
                   <label className="text-xs font-medium text-text/70">
@@ -829,10 +891,19 @@ export default function VendorTransactionPage() {
                   <span className="text-text/70">
                     Debits <strong className="text-text">{data.vendor.currency} {visibleDebits.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
                   </span>
+                  {(filters.from || filters.to) && periodBalances && (
+                    <span className="text-text/70">
+                      Opening <strong className="text-text">{data.vendor.currency} {periodBalances.opening.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                      {" · "}Closing <strong className="text-text">{data.vendor.currency} {periodBalances.closing.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                    </span>
+                  )}
                   {filtering && (
                     <button type="button" onClick={() => setFilters(NO_FILTERS)} className="font-medium text-primary hover:underline">
                       Clear search
                     </button>
+                  )}
+                  {filtering && (
+                    <span className="text-xs text-text/55">Exports include only the entries shown.</span>
                   )}
                 </div>
               </div>

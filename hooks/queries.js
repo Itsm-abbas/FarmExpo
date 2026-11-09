@@ -7,6 +7,9 @@ import axiosInstance from "@utils/axiosConfig";
 
 export const queryKeys = {
   consignments: ["consignments"],
+  // Light list for the dashboard (number, date, stage, consignee). Under
+  // "consignments", so refreshing the full list refreshes this too.
+  consignmentSummaries: ["consignments", "summary"],
   consignment: (id) => ["consignment", Number(id)],
   // The consignee's account on a consignment's commercial invoice.
   consignmentAccount: (id) => ["consignmentAccount", Number(id)],
@@ -44,6 +47,7 @@ export const listQueries = {
   utilization: { queryKey: queryKeys.utilization, queryFn: get("/utilization") },
   bankAccounts: { queryKey: queryKeys.bankAccounts, queryFn: get("/bank-accounts") },
   vendors: { queryKey: queryKeys.vendors, queryFn: get("/vendors/transactions") },
+  consignmentSummaries: { queryKey: queryKeys.consignmentSummaries, queryFn: get("/consignment?view=summary") },
 };
 
 export const consignmentQuery = (id) => ({

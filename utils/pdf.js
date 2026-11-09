@@ -8,10 +8,13 @@ import { entryNote, formatDate, formatKg, pricePerUnit } from "@utils/invoice";
 const PAGE_W = 210;
 const PAGE_H = 297;
 const FOOTER_SPACE = 8;
+// Tallest block (mm) moved to the next page whole rather than split.
+const KEEP_TOGETHER = 45;
 
-const INK = [24, 33, 29];
-const MUTED = [104, 114, 109];
-const RULE = [210, 215, 212];
+// Near-black text and darker greys, so printed copies read clearly.
+const INK = [0, 0, 0];
+const MUTED = [64, 70, 67];
+const RULE = [160, 166, 163];
 const SOFT = [243, 245, 244];
 const WHITE = [255, 255, 255];
 
@@ -40,7 +43,7 @@ function templateStyle(template, brand) {
       return {
         id: "compact",
         margin: 12,
-        base: 8,
+        base: 8.5,
         titleSize: 13,
         headingFont: "helvetica",
         titleColor: INK,
@@ -66,6 +69,12 @@ function templateStyle(template, brand) {
       };
   }
 }
+
+// Width and height (mm) of an image scaled to fit within maxW x maxH.
+const fitBox = (image, maxW, maxH) => {
+  const scale = Math.min(maxW / image.width, maxH / image.height);
+  return { w: image.width * scale, h: image.height * scale };
+};
 
 const clean = (lines) => lines.filter((l) => l !== null && l !== undefined && String(l).trim() !== "");
 
@@ -108,18 +117,23 @@ export function dataUrlToLetterhead(dataUrl) {
 // Logo and (when switched on) letterhead of the organization, ready to draw.
 // `overrides` lets the settings page preview unsaved uploads.
 export async function loadBranding(organization, overrides = {}) {
-  const branding = { logo: null, letterhead: null };
-  const logoSrc = overrides.logo !== undefined ? overrides.logo : organization?.logoUrl;
-  if (logoSrc) {
+  const branding = { logo: null, signature: null, letterhead: null };
+  // A missing logo or signature shouldn't stop the document.
+  const loadImage = async (source) => {
+    if (!source) return null;
     try {
-      const src = logoSrc.startsWith("data:")
-        ? logoSrc
-        : await blobToDataUrl(await (await fetch(logoSrc)).blob());
-      branding.logo = await toPngDataUrl(src);
+      const src = source.startsWith("data:")
+        ? source
+        : await blobToDataUrl(await (await fetch(source)).blob());
+      return await toPngDataUrl(src);
     } catch {
-      branding.logo = null; // A missing logo shouldn't stop the document.
+      return null;
     }
-  }
+  };
+  branding.logo = await loadImage(overrides.logo !== undefined ? overrides.logo : organization?.logoUrl);
+  branding.signature = await loadImage(
+    overrides.signature !== undefined ? overrides.signature : organization?.signatureUrl
+  );
 
   const useLetterhead = overrides.useLetterhead ?? organization?.useLetterhead;
   if (useLetterhead) {
@@ -183,6 +197,7 @@ class PdfBuilder {
     this.brand = hexToRgb(this.org.brandColor);
     this.style = templateStyle(template || this.org.invoiceTemplate, this.brand);
     this.logo = branding?.logo || null;
+    this.signatureImage = branding?.signature || null;
     this.letterhead = branding?.letterhead || null;
 
     this.doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
@@ -373,8 +388,10 @@ class PdfBuilder {
 
   // `keepWith`: room (mm) needed below the heading, so a heading is never
   // left alone at the bottom of a page.
+  // Only short blocks (up to KEEP_TOGETHER mm) are kept whole; longer ones
+  // start on the current page, so no large gap is left behind.
   sectionTitle(text, keepWith = 16) {
-    this.ensureSpace(Math.min(keepWith + 8, this.bottomLimit - this.top));
+    this.ensureSpace(Math.min(keepWith, KEEP_TOGETHER) + 8);
     this.font(this.style.base + 1.5, {
       bold: true,
       heading: true,
@@ -409,10 +426,11 @@ class PdfBuilder {
       margin: this.tableMargin,
       rowPageBreak: "avoid",
       // Short tables move to the next page whole rather than splitting.
-      pageBreak: keepTogether ? "avoid" : "auto",
+      pageBreak:
+        keepTogether && this.tableHeight(body.length) <= KEEP_TOGETHER ? "avoid" : "auto",
       styles: {
         font: "helvetica",
-        fontSize: fontSize || style.base - 0.8,
+        fontSize: fontSize || style.base - 0.3,
         cellPadding: style.padding,
         textColor: INK,
         lineColor: RULE,
@@ -495,10 +513,16 @@ class PdfBuilder {
     this.y += 4;
   }
 
-  signature() {
-    this.ensureSpace(24);
+  // The signature line; with `signed`, the organization's signature image
+  // (when one is uploaded) is drawn on it.
+  signature({ signed = false } = {}) {
+    const image = signed ? this.signatureImage : null;
+    const box = image ? fitBox(image, 55, 20) : null;
+    const above = box ? box.h + 2 : 14;
+    this.ensureSpace(above + 10);
     const x = this.right - 62;
-    const y = this.y + 14;
+    const y = this.y + above;
+    if (box) this.doc.addImage(image.dataUrl, "PNG", x + (62 - box.w) / 2, y - box.h - 0.5, box.w, box.h);
     this.doc.setDrawColor(...INK);
     this.doc.setLineWidth(0.2);
     this.doc.line(x, y, this.right, y);
@@ -594,7 +618,7 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     );
   }
   if (shipment.length) {
-    pdf.sectionTitle("Shipment", Math.ceil(shipment.length / 2) * 5.5);
+    pdf.sectionTitle("Shipment details", Math.ceil(shipment.length / 2) * 5.5);
     pdf.details(shipment);
   }
 
@@ -632,6 +656,8 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
       "",
       money(goodsTotal),
     ],
+    // Many columns: a touch smaller than other tables so numbers don't wrap.
+    fontSize: pdf.style.base - 0.8,
     columnStyles: {
       0: { cellWidth: 10, halign: "right" },
       3: right,
@@ -702,11 +728,14 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     pdf.sectionTitle("Notes", 18);
     pdf.paragraph(organization.invoiceNotes);
   }
-  pdf.signature();
+  pdf.signature({ signed: Boolean(commercial) || organization?.signatureOn === "all" });
   return pdf.output(generatedNote());
 }
 
-export async function buildStatementPdf({ vendor, transactions, organization, branding, template }) {
+// A partner's statement. `transactions` are the entries to show (any filters
+// applied); `opening` and `closing` are the balances around the chosen
+// dates (default: the whole ledger); `filters` describes the filters in words.
+export async function buildStatementPdf({ vendor, transactions, filters, opening, closing, organization, branding, template }) {
   const pdf = new PdfBuilder({ organization, branding, template });
   const currency = vendor.currency;
   const rows = [...transactions].sort(
@@ -714,7 +743,8 @@ export async function buildStatementPdf({ vendor, transactions, organization, br
   );
   const credits = rows.filter((t) => t.type === "credit").reduce((s, t) => s + t.amount, 0);
   const debits = rows.filter((t) => t.type === "debit").reduce((s, t) => s + t.amount, 0);
-  const opening = vendor.openingBalance || 0;
+  opening = opening ?? (vendor.openingBalance || 0);
+  closing = closing ?? vendor.balance;
   const period = rows.length
     ? `${formatDate(rows[0].createdAt)} to ${formatDate(rows[rows.length - 1].createdAt)}`
     : "No entries";
@@ -726,11 +756,12 @@ export async function buildStatementPdf({ vendor, transactions, organization, br
     ["Period", period],
     ["Date", formatDate(new Date())],
   ]);
+  if (filters) pdf.paragraph(`Filtered: ${filters}`);
   pdf.figures([
     ["Opening balance", money(opening, currency)],
     ["Credits", money(credits, currency)],
     ["Debits", money(debits, currency)],
-    ["Closing balance", money(vendor.balance, currency)],
+    ["Closing balance", money(closing, currency)],
   ]);
   pdf.table({
     head: ["Date", "Reference", "Note", "Cons.", "Credit", "Debit", "Balance"],
@@ -746,7 +777,7 @@ export async function buildStatementPdf({ vendor, transactions, organization, br
         money(t.balanceAfter),
       ]),
     ],
-    foot: ["", "", "Totals", "", money(credits), money(debits), money(vendor.balance)],
+    foot: ["", "", "Totals", "", money(credits), money(debits), money(closing)],
     columnStyles: {
       0: { cellWidth: 23 },
       1: { cellWidth: 33 },

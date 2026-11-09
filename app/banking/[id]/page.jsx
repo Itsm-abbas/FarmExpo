@@ -122,7 +122,7 @@ export default function BankAccountPage() {
     [data]
   );
 
-  if (isLoading) return <PageLoader label="Loading the account…" />;
+  if (isLoading) return <PageLoader label="Loading the account…" variant="ledger" />;
   if (isError || !data) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-8">

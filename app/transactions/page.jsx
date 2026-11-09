@@ -22,6 +22,7 @@ import {
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
 import EditPayment from "@components/Forms/EditPayment";
+import DataLoader from "@components/Loader/dataLoader";
 
 // Offered until the organization has used them; any other name can be typed.
 const COMMON_EXPENSES = ["Office expenses", "House expenses"];
@@ -210,7 +211,7 @@ function TransactionsPage() {
     }
   };
 
-  if (vendorsLoading || banksLoading) return <PageLoader label="Loading transactions…" />;
+  if (vendorsLoading || banksLoading) return <PageLoader label="Loading transactions…" variant="ledger" />;
 
   const received = rows.filter((t) => !t.source && directionOf(t, t.vendor.role) === "received");
   const paid = rows.filter((t) => !t.source && directionOf(t, t.vendor.role) === "paid");
@@ -414,7 +415,7 @@ function TransactionsPage() {
 
         <div className={`mt-5 overflow-x-auto transition-opacity ${isFetching && !isLoading ? "opacity-60" : ""}`} aria-busy={isFetching}>
           {isLoading ? (
-            <p role="status" className="py-8 text-center text-sm text-text/55">Loading transactions…</p>
+            <DataLoader rows={8} cols={6} />
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-text/60">{note.trim() ? "No entries have that in their note." : "Nothing in this period. Change the filters or record a transaction above."}</p>
           ) : (
@@ -524,7 +525,7 @@ function TransactionsPage() {
 // useSearchParams needs a Suspense boundary.
 export default function Page() {
   return (
-    <Suspense fallback={<PageLoader label="Loading transactions…" />}>
+    <Suspense fallback={<PageLoader label="Loading transactions…" variant="ledger" />}>
       <TransactionsPage />
     </Suspense>
   );

@@ -269,8 +269,8 @@ const ReusableTable = ({
                           exit={{ opacity: 0 }}
                         >
                           {headers.map((_, idx) => (
-                            <td key={idx} className="px-4 py-3 animate-pulse">
-                              <div className="h-4 bg-primary/20 rounded"></div>
+                            <td key={idx} className="px-4 py-3">
+                              <div className="skeleton h-4" />
                             </td>
                           ))}
                         </motion.tr>

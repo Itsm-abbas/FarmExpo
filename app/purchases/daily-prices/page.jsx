@@ -11,6 +11,7 @@ import { formatMoney } from "@utils/money";
 import { daysBefore, formatDay, formatKg, today } from "@utils/days";
 import { Button, Field, PageHeader, Panel, inputClass } from "@components/Page";
 import PageLoader from "@components/Loader/PageLoader";
+import DataLoader from "@components/Loader/dataLoader";
 
 // "Ali, Bashir and 2 more"
 function names(traders) {
@@ -113,7 +114,7 @@ export default function DailyPricesPage() {
       </div>
 
       {isLoading ? (
-        <PageLoader label="Working out the averages…" />
+        <DataLoader rows={8} cols={6} />
       ) : isError ? (
         <p role="alert" className="text-sm text-red-600">
           Couldn't load the price list. Check your connection and try again.

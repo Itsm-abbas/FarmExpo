@@ -6,6 +6,7 @@ import { entryNote, formatDate, pricePerUnit } from "@utils/invoice";
 import { formatDay } from "@utils/days";
 
 const MONEY = "#,##0.00";
+const NEGATIVE_RED = "#,##0.00;[Red]-#,##0.00";
 const KG = '#,##0.00" kg"';
 const INT = "#,##0";
 
@@ -183,6 +184,11 @@ class SheetBuilder {
   }
 }
 
+const generatedLine = (b) => {
+  b.blank();
+  b.add([{ v: `Generated ${formatDate(new Date())}`, t: "s", s: { font: { italic: true, color: { rgb: "68726D" } } } }]);
+};
+
 function save(builder, sheetName, filename) {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, builder.toSheet(), sheetName);
@@ -232,7 +238,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
   const gd = invoice.goodsDeclaration;
   // Shipment details are internal: the commercial invoice leaves them out.
   if ((awb || gd) && !commercial) {
-    b.section("Shipment");
+    b.section("Shipment details");
     const shipment = [
       ["Airway bill", awb?.number || ""],
       ["Goods declaration", gd?.number || ""],
@@ -330,6 +336,42 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
     ]);
   }
 
+  // Every headline figure in one place at the end.
+  const totals = invoice.totals;
+  b.section(`Summary (${goodsCurrency})`);
+  if (commercial) {
+    b.pairs([
+      ["Total quantity", totals.quantity, INT],
+      ["Invoice total", commercial.total],
+      ["Net weight", totals.netWeight, KG],
+      ...(account
+        ? [
+            ["Previous balance", account.previousBalance],
+            ["Gross weight", totals.grossWeight, KG],
+            ["Outstanding", account.outstanding],
+          ]
+        : [["Gross weight", totals.grossWeight, KG]]),
+    ]);
+  } else {
+    const rec = invoice.recovery;
+    b.pairs([
+      ["Total quantity", totals.quantity, INT],
+      ["Goods amount", totals.goodsCost],
+      ["Net weight", totals.netWeight, KG],
+      ["Packaging", totals.packagingCost],
+      ["Gross weight", totals.grossWeight, KG],
+      ...(includeCosts
+        ? [
+            ["Taxes", invoice.totalTaxes],
+            ["Items", invoice.goods.length, INT],
+            ["Total cost", invoice.totalCost],
+            ["Recovered", rec ? rec.local : 0],
+            [invoice.result >= 0 ? "Profit" : "Loss", invoice.result, NEGATIVE_RED],
+          ]
+        : [["Items", invoice.goods.length, INT]]),
+    ]);
+  }
+
   if (organization?.invoiceNotes) {
     b.section("Notes");
     const r = b.add([{ v: organization.invoiceNotes, t: "s", s: { alignment: { wrapText: true, vertical: "top" } } }]);
@@ -342,12 +384,17 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
   save(b, "Invoice", filename);
 }
 
-export function exportStatementExcel({ vendor, transactions, organization, filename }) {
+// A partner's statement; arguments as for buildStatementPdf.
+export function exportStatementExcel({ vendor, transactions, filters, opening, closing, organization, filename }) {
   const b = new SheetBuilder([14, 18, 14, 40, 12, 16, 16, 16], organization?.brandColor);
   const currency = vendor.currency;
   const rows = [...transactions].sort(
     (a, c) => new Date(a.createdAt) - new Date(c.createdAt) || a.id - c.id
   );
+  opening = opening ?? (vendor.openingBalance || 0);
+  closing = closing ?? (vendor.balance || 0);
+  const credits = rows.filter((t) => t.type === "credit").reduce((s, t) => s + t.amount, 0);
+  const debits = rows.filter((t) => t.type === "debit").reduce((s, t) => s + t.amount, 0);
 
   b.title(organization?.name || "FarmExpo", orgSubtitle(organization));
   b.blank();
@@ -355,13 +402,14 @@ export function exportStatementExcel({ vendor, transactions, organization, filen
     [
       ["Statement of account", vendor.name],
       ["Currency", currency],
-      ["Opening balance", vendor.openingBalance || 0],
-      ["Closing balance", vendor.balance || 0],
+      ["Opening balance", opening],
+      ["Closing balance", closing],
       ["Entries", rows.length, INT],
       ["Date", formatDate(new Date())],
     ],
     { half: 4 }
   );
+  filtersLine(b, filters);
   b.blank();
   b.table(
     [
@@ -372,14 +420,28 @@ export function exportStatementExcel({ vendor, transactions, organization, filen
       { header: "Consignment", key: (t) => (t.consignmentId ? t.consignment?.number || `#${t.consignmentId}` : "") },
       { header: `Credit (${currency})`, key: (t) => (t.type === "credit" ? t.amount : ""), format: MONEY, total: "sum" },
       { header: `Debit (${currency})`, key: (t) => (t.type === "debit" ? t.amount : ""), format: MONEY, total: "sum" },
-      { header: `Balance (${currency})`, key: "balanceAfter", format: MONEY, total: vendor.balance || 0 },
+      { header: `Balance (${currency})`, key: "balanceAfter", format: MONEY, total: closing },
     ],
     // The running balance starts from the opening balance.
     [
-      { id: 0, createdAt: null, transactionId: "", voucherId: "", details: "Opening balance", balanceAfter: vendor.openingBalance || 0 },
+      { id: 0, createdAt: null, transactionId: "", voucherId: "", details: "Opening balance", balanceAfter: opening },
       ...rows,
     ]
   );
+
+  b.section(`Summary (${currency})`);
+  b.pairs(
+    [
+      ["Opening balance", opening],
+      ["Total credits", credits],
+      ["Closing balance", closing],
+      ["Total debits", debits],
+      ["Entries", rows.length, INT],
+      ["Net (credits - debits)", credits - debits, NEGATIVE_RED],
+    ],
+    { half: 4 }
+  );
+  generatedLine(b);
 
   save(b, "Statement", filename);
 }
