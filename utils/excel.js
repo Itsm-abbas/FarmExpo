@@ -306,10 +306,11 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
 
   if (!commercial && includeCosts) {
     b.section(`Costs and result (${currency})`);
-    const rows = invoice.costs.map((row) => ({ label: row.label, basis: row.detail || "", amount: row.amount }));
+    const rows = invoice.costs.map((row) => ({ label: row.label, party: row.party || "", basis: row.detail || "", amount: row.amount }));
     const totalRow = b.table(
       [
         { header: "Cost", key: "label", total: "Total cost" },
+        { header: "Paid to", key: "party" },
         { header: "Basis", key: "basis" },
         { header: `Amount (${currency})`, key: "amount", format: MONEY, total: "sum" },
       ],
@@ -330,7 +331,7 @@ export function exportInvoiceExcel({ invoice, organization, currency, includeCos
       [`Recovered (${currency})`, { v: rec ? rec.local : 0, f: `${amountCell}*${rateCell}` }],
       [
         `Profit or loss (${currency})`,
-        { v: invoice.result, f: `${recoveredCell}-${b.cell(totalRow, 2)}` },
+        { v: invoice.result, f: `${recoveredCell}-${b.cell(totalRow, 3)}` },
         `#,##0.00;[Red]-#,##0.00`,
       ],
     ]);

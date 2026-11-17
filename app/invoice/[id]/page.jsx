@@ -753,7 +753,11 @@ function InvoicePage() {
               <SectionTitle>Costs and result</SectionTitle>
               <dl className="max-w-md tabular">
                 {invoice.costs.map((row) => (
-                  <Line key={row.key} label={row.detail ? `${row.label} (${row.detail})` : row.label} value={money(row.amount, currency)} />
+                  <Line
+                    key={row.key}
+                    label={[row.label, row.party && `– ${row.party}`, row.detail && `(${row.detail})`].filter(Boolean).join(" ")}
+                    value={money(row.amount, currency)}
+                  />
                 ))}
                 <div className="mt-1 flex justify-between border-t border-gray-300 pt-1 font-semibold text-gray-900">
                   <span>Total cost</span>

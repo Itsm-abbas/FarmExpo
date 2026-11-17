@@ -52,15 +52,23 @@ export function computeInvoice(consignment, utilizations = []) {
       key: "airwayBill",
       label: "Airway bill",
       detail: awb ? `${fmt(awbWeight)} kg x ${fmt(awb.rate)} + fee ${fmt(awb.fee)}` : "",
+      // Whose ledger the cost is posted to.
+      party: awb?.iataAgent?.vendor?.name || "",
       amount: num(awb?.rate) * awbWeight + num(awb?.fee),
     },
     {
       key: "packing",
       label: "Packing",
       detail: c.packing ? `${fmt(awbWeight)} kg x ${fmt(c.packing.ratePerKg)}/kg` : "",
+      party: c.packing?.packer?.vendor?.name || c.packing?.trader?.name || "",
       amount: awbWeight * num(c.packing?.ratePerKg),
     },
-    { key: "customClearance", label: "Custom clearance", amount: num(c.customClearance?.fee) },
+    {
+      key: "customClearance",
+      label: "Custom clearance",
+      party: c.customClearance?.customAgent?.vendor?.name || "",
+      amount: num(c.customClearance?.fee),
+    },
     { key: "dailyExpenses", label: "Daily expenses", amount: num(c.dailyExpenses) },
     // Taxes added on the consignment page, each with its own remark.
     ...(Array.isArray(c.taxes) ? c.taxes : []).map((tax, i) => ({

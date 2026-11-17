@@ -708,18 +708,19 @@ export async function buildInvoicePdf({ invoice, organization, branding, currenc
     pdf.sectionTitle("Costs and result", pdf.tableHeight(invoice.costs.length + 3));
     const rec = invoice.recovery;
     pdf.table({
-      head: ["", "Basis", `Amount (${currency})`],
+      head: ["", "Paid to", "Basis", `Amount (${currency})`],
       body: [
-        ...invoice.costs.map((row) => [row.label, row.detail || "", money(row.amount)]),
-        [{ content: "Total cost", styles: { fontStyle: "bold" } }, "", { content: money(invoice.totalCost), styles: { fontStyle: "bold" } }],
+        ...invoice.costs.map((row) => [row.label, row.party || "", row.detail || "", money(row.amount)]),
+        [{ content: "Total cost", styles: { fontStyle: "bold" } }, "", "", { content: money(invoice.totalCost), styles: { fontStyle: "bold" } }],
         [
           "Recovered",
+          invoice.consignee?.name || "",
           rec ? `${money(rec.amount, rec.currency)} at ${rec.exchangeRate}` : "Not recorded yet",
           money(rec?.local || 0),
         ],
       ],
-      foot: [invoice.result >= 0 ? "Profit" : "Loss", "", money(Math.abs(invoice.result))],
-      columnStyles: { 0: { cellWidth: 45 }, 2: { ...right, cellWidth: 40 } },
+      foot: [invoice.result >= 0 ? "Profit" : "Loss", "", "", money(Math.abs(invoice.result))],
+      columnStyles: { 0: { cellWidth: 38 }, 1: { cellWidth: 42 }, 3: { ...right, cellWidth: 36 } },
       keepTogether: true,
     });
   }
