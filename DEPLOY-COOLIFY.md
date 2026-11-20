@@ -230,18 +230,19 @@ Notes:
 
 ---
 
-## 7. Run database migrations on each deploy
+## 7. Database migrations: nothing to set
 
-In the app's **Configuration > General** (or **Advanced**), find
-**Pre-deployment command** and enter:
+`npm start` runs `prisma migrate deploy` before starting the app, so each new
+version applies its migrations (such as `invoice_signature` and
+`speed_indexes`) itself, with its own environment variables. They are written
+to be safe to run more than once.
 
-```
-npm run migrate
-```
+Leave Coolify's **Pre-deployment command** **empty**: Coolify runs it in the
+version that is *already running*, which does not see newly added
+environment variables.
 
-This runs `prisma migrate deploy` before each new version starts, so
-migrations (such as `invoice_signature` and `speed_indexes`) are applied
-automatically. They are written to be safe to run more than once.
+If a migration fails, the app does not start and the error is in
+**Runtime Logs**.
 
 ---
 
