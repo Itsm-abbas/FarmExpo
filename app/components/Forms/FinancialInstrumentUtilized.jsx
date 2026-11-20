@@ -14,7 +14,7 @@ import {
 
 export default function FinancialInstrumentUtilizedForm() {
   const token = getCookie("token");
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const [formData, setFormData] = useState({

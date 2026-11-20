@@ -19,7 +19,7 @@ export default function PackagingForm({
   setActiveAccordion,
   isLocked = false,
 }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
   const token = getCookie("token");
   const router = useRouter();
   const [loadingStates, setLoadingStates] = useState({});

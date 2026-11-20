@@ -12,7 +12,7 @@ export default function LedgerSelection() {
     // Fetch consignments (Replace with API call if needed)
     const fetchConsignments = async () => {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/consignment`,
+        `${process.env.NEXT_PUBLIC_API_URL || "/api"}/consignment`,
         {
           headers: {
             "Content-Type": "application/json",

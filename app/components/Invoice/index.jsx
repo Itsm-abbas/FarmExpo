@@ -15,7 +15,7 @@ export default function Invoice() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/consignment/${id}`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "/api"}/consignment/${id}`);
         const result = await response.json();
         setData(result);
       } catch (error) {

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getCookie } from "cookies-next";
 import axiosInstance from "@utils/axiosConfig";
-export const apiURL = process.env.NEXT_PUBLIC_API_URL;
+export const apiURL = process.env.NEXT_PUBLIC_API_URL || "/api";
 export const api_endpoint = {
   consignments: `${apiURL}/consignments`,
   consignmetitem: `${apiURL}/consignmetitem`,

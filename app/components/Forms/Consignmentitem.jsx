@@ -21,7 +21,7 @@ import {
 export default function ConsignmentItemForm({ consignmentId }) {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
   const router = useRouter();
   const token = getCookie("token");
 

@@ -14,7 +14,7 @@ import {
 } from "react-icons/fa";
 
 export default function AddUser() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
   const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: "",
